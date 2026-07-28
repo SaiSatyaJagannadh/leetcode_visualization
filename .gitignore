@@ -432,3 +432,4 @@ FodyWeavers.xsd
 .next/
 out/
 .env
+.next-build/

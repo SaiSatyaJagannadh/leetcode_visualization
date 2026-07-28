@@ -47,7 +47,13 @@ export function Diagram({
   const at = new Map(nodes.map((n) => [n.id, { x: px(n), y: py(n) }]));
 
   const w = PAD * 2 + spanX * GAP_X;
-  const h = PAD * 2 + spanY * GAP_Y;
+  // Arcs bow below the row they connect, so reserve room or they get clipped.
+  const arcs = edges.some((e) => {
+    const a = at.get(e.from);
+    const b = at.get(e.to);
+    return a && b && e.from !== e.to && a.y === b.y && Math.abs(b.x - a.x) > GAP_X * 1.4;
+  });
+  const h = PAD * 2 + spanY * GAP_Y + (arcs ? R + 60 : 0);
 
   return (
     <svg className="diagram" viewBox={`0 0 ${w} ${h}`} style={{ maxHeight: h + 10 }}>
@@ -71,12 +77,25 @@ export function Diagram({
         const self = e.from === e.to;
         const x2 = b.x - (dx / len) * (R + 8);
         const y2 = b.y - (dy / len) * (R + 8);
+        // A long edge along one row would lie on top of the nodes between it —
+        // a list's cycle edge is exactly this case. Arc it clear instead.
+        const arc = !self && a.y === b.y && Math.abs(dx) > GAP_X * 1.4;
+        const lift = (dx < 0 ? 1 : -1) * (R + 24);
         return (
           <g key={i}>
             {self ? (
               <path
                 className={e.hot ? "edge hot" : "edge"}
                 d={`M${a.x - 8},${a.y - R} a 16,16 0 1,1 16,0`}
+                markerEnd={e.hot ? "url(#ah-hot)" : "url(#ah)"}
+                fill="none"
+              />
+            ) : arc ? (
+              <path
+                className={e.hot ? "edge hot" : "edge"}
+                d={`M${a.x},${a.y + Math.sign(lift) * R} Q${(a.x + b.x) / 2},${
+                  a.y + lift * 2
+                } ${b.x},${b.y + Math.sign(lift) * R}`}
                 markerEnd={e.hot ? "url(#ah-hot)" : "url(#ah)"}
                 fill="none"
               />
