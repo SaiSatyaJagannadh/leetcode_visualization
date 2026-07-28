@@ -130,3 +130,49 @@ pre.code .ln.on { background: #58a6ff1f; border-left-color: var(--accent); }
 .player input[type="range"] { flex: 1; accent-color: var(--accent); }
 .player .count { font: 12px var(--mono); color: var(--dim); min-width: 74px; text-align: right; }
 .hint { color: #5a6472; font-size: 12px; margin-top: 8px; }
+
+/* --- diagrams (tree, list, graph, heap, trie, call tree) ----------------- */
+
+.diagram { width: 100%; height: auto; overflow: visible; }
+.diagram .edge { stroke: #5b6775; stroke-width: 1.5; }
+.diagram .edge.hot { stroke: var(--hot); stroke-width: 2; }
+.diagram .edge-label { fill: var(--dim); font: 10px var(--mono); text-anchor: middle; }
+.diagram .node circle { fill: #0e1116; stroke: var(--line); stroke-width: 1.5; }
+.diagram .node.hot circle { stroke: var(--hot); fill: #f0883e1f; }
+.diagram .node.dim circle { stroke: #3a2226; fill: #16161a; }
+.diagram .node.dim .node-label { fill: #5a6472; }
+.diagram .node.pick { cursor: pointer; }
+.diagram .node.pick:hover circle { stroke: var(--accent); }
+.diagram .node-label { fill: var(--fg); font: 13px var(--mono); text-anchor: middle; }
+.diagram .node-sub { fill: var(--dim); font: 10px var(--mono); text-anchor: middle; }
+.diagram .node-mark { fill: var(--accent); font: 11px var(--mono); text-anchor: middle; }
+
+/* --- grid --------------------------------------------------------------- */
+
+.grid { display: grid; gap: 3px; width: max-content; max-width: 100%; }
+.grow { display: flex; gap: 3px; }
+.gcell {
+  min-width: 34px; padding: 6px 4px; text-align: center;
+  font: 12px var(--mono); background: #0e1116;
+  border: 1px solid var(--line); border-radius: 5px;
+}
+.gcell.zero { color: #4b535f; }
+.gcell.front { border-color: var(--accent); background: #58a6ff1a; }
+.gcell.hit { border-color: var(--hot); background: #f0883e26; color: var(--fg); }
+
+/* --- intervals ---------------------------------------------------------- */
+
+.spans { display: grid; gap: 4px; }
+.span-row { display: flex; }
+.bar {
+  font: 11px var(--mono); padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+  background: #58a6ff26; border: 1px solid var(--accent); color: var(--fg);
+}
+
+/* --- misc --------------------------------------------------------------- */
+
+.cells.tight .box { min-width: 26px; padding: 6px 4px; }
+.var .name em { font-style: normal; color: #5a6472; }
+.panel.scrollable { overflow-x: auto; }
+.gallery-item { margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--line); }
+.gallery-item h2 { font-size: 18px; font-weight: 600; margin-bottom: 14px; }

@@ -9,3 +9,6 @@ const read = (file: string) => JSON.parse(readFileSync(join(DIR, file), "utf8"))
 /** Parsing here means `next build` is the schema verification step. */
 export const getIndex = () => Index.parse(read("index.json"));
 export const getProblem = (slug: string) => Problem.parse(read(`${slug}.json`));
+
+export const getFixtureNames = (): string[] => read("_fixtures/index.json");
+export const getFixture = (name: string) => Problem.parse(read(`_fixtures/${name}.json`));

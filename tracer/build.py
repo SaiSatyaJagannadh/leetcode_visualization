@@ -21,20 +21,30 @@ def load(path):
 
 def main():
     OUT.mkdir(exist_ok=True)
+    (OUT / "_fixtures").mkdir(exist_ok=True)
     only = sys.argv[1:] or None
     index = []
-    for sol in sorted(ROOT.glob("content/problems/*/solution.py")):
-        slug = sol.parent.name
+    sources = [(p, False) for p in sorted(ROOT.glob("content/problems/*/solution.py"))]
+    sources += [(p, True) for p in sorted(ROOT.glob("fixtures/*.py"))]
+
+    for src, is_fixture in sources:
+        slug = src.stem if is_fixture else src.parent.name
         if only and slug not in only:
             continue
-        obj = leetviz.build_problem(load(sol))
-        dest = OUT / f"{slug}.json"
+        obj = leetviz.build_problem(load(src))
+        dest = OUT / ("_fixtures" if is_fixture else "") / f"{slug}.json"
         leetviz.dump(obj, dest)
         kb = dest.stat().st_size / 1024
-        print(f"{slug:28} {len(obj['approaches'])} approaches  {kb:6.1f} KB")
-        index.append({k: obj[k] for k in ("slug", "title", "pattern", "difficulty")})
+        steps = max(len(v["steps"]) for a in obj["approaches"] for v in a["variants"])
+        print(f"{slug:22} {len(obj['approaches'])} approaches  {steps:5} steps  {kb:6.1f} KB")
+        if kb > 150:
+            print(f"  !! {slug} is over the 150 KB budget")
+        if not is_fixture:
+            index.append({k: obj[k] for k in ("slug", "title", "pattern", "difficulty")})
     if not only:
         leetviz.dump(sorted(index, key=lambda p: p["title"]), OUT / "index.json")
+        names = [p.stem for p in sorted(ROOT.glob("fixtures/*.py"))]
+        leetviz.dump(names, OUT / "_fixtures" / "index.json")
 
 
 if __name__ == "__main__":

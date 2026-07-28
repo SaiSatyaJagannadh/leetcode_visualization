@@ -23,19 +23,27 @@ export const Step = z.object({
 });
 
 export const Variant = z.object({
-  id: z.enum(["typical", "edge", "worst-case"]),
+  /** Convention is typical | edge | worst-case; fixtures name their own cases. */
+  id: z.string(),
   label: z.string(),
-  input: z.record(Val),
+  note: z.string().nullish(),
   result: Val,
-  steps: z.array(Step),
+  steps: z.array(Step).min(1),
 });
 
 export const Approach = z.object({
   id: z.string(),
   label: z.string(),
   complexity: z.object({ time: z.string(), space: z.string() }),
-  /** Only overrides. Unlisted vars render by value type. e.g. `{ i: "pointer:nums" }` */
+  /**
+   * Only overrides — unlisted vars render by value type. Either a bare kind
+   * (`grid`, `stack`, `queue`, `heap`, `bits`, `graph`, `trie`, `intervals`,
+   * `node`, `recursion`) or `role:host` attaching one var to another
+   * (`pointer:nums`, `row:dp`, `cells:grid`, `labels:adj`, `marked:adj`).
+   */
   viz: z.record(z.string()),
+  /** Static coordinates for vars the renderer can't lay out itself (graphs). */
+  layout: z.record(z.record(z.tuple([z.number(), z.number()]))),
   source: z.array(z.string()),
   variants: z.array(Variant).min(1),
 });
@@ -45,13 +53,18 @@ export const Problem = z.object({
   slug: z.string(),
   title: z.string(),
   pattern: z.string(),
-  difficulty: z.enum(["Easy", "Medium", "Hard"]),
-  leetcode: z.number(),
-  prompt: z.string(),
+  /** Fixtures carry no difficulty, LeetCode number or prompt. */
+  difficulty: z.enum(["Easy", "Medium", "Hard"]).optional(),
+  leetcode: z.number().optional(),
+  prompt: z.string().optional(),
   approaches: z.array(Approach).min(1),
 });
 
-export const Index = z.array(Problem.pick({ slug: true, title: true, pattern: true, difficulty: true }));
+export const Index = z.array(
+  Problem.pick({ slug: true, title: true, pattern: true }).extend({
+    difficulty: z.enum(["Easy", "Medium", "Hard"]),
+  })
+);
 
 export type Op = z.infer<typeof Op>;
 export type Step = z.infer<typeof Step>;
