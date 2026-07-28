@@ -37,6 +37,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
 .list a:hover { border-color: var(--accent); }
 .list .num { color: var(--dim); font: 13px var(--mono); min-width: 34px; }
 .list .pat { margin-left: auto; color: var(--dim); font-size: 13px; }
+.list .tag { margin-left: auto; }
 
 /* --- problem header ---------------------------------------------------- */
 
@@ -176,3 +177,30 @@ pre.code .ln.on { background: #58a6ff1f; border-left-color: var(--accent); }
 .panel.scrollable { overflow-x: auto; }
 .gallery-item { margin-top: 48px; padding-top: 28px; border-top: 1px solid var(--line); }
 .gallery-item h2 { font-size: 18px; font-weight: 600; margin-bottom: 14px; }
+
+/* --- roadmap ------------------------------------------------------------ */
+
+.group { margin-top: 34px; }
+.group-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.group-head h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.progress { font: 12px var(--mono); color: #5a6472; }
+.list { display: grid; gap: 6px; }
+.list a, .list .row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 9px;
+  background: var(--panel);
+}
+.list .row.pending { opacity: 0.42; }
+.list .num { color: #5a6472; font: 12px var(--mono); min-width: 42px; }
+
+/* --- examples ----------------------------------------------------------- */
+
+.examples { display: grid; gap: 8px; margin: 0 0 26px; max-width: 78ch; }
+.example {
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+  padding: 10px 14px; font: 12.5px/1.7 var(--mono);
+}
+.example .lbl { color: #5a6472; }
+.example .why { color: var(--dim); font-family: inherit; }
+.constraints { color: var(--dim); font: 12px var(--mono); margin-bottom: 26px; }
+.constraints li { margin-left: 18px; }

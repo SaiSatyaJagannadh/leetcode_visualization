@@ -2,20 +2,48 @@ import Link from "next/link";
 import { getIndex } from "@/lib/traces";
 
 export default function Home() {
-  const problems = getIndex();
+  const { patterns, problems } = getIndex();
+  const done = problems.filter((p) => p.ready).length;
+
   return (
     <main>
       <h1 className="brand">LeetViz</h1>
-      <p className="tagline">Step through the algorithm, one line at a time.</p>
-      <div className="list">
-        {problems.map((p) => (
-          <Link href={`/p/${p.slug}`} key={p.slug}>
-            <span className={`tag ${p.difficulty}`}>{p.difficulty}</span>
-            <span>{p.title}</span>
-            <span className="pat">{p.pattern}</span>
-          </Link>
-        ))}
-      </div>
+      <p className="tagline">
+        Step through the algorithm, one line at a time. {done} of {problems.length}{" "}
+        problems traced across {patterns.length} patterns.
+      </p>
+
+      {patterns.map((pattern) => {
+        const group = problems.filter((p) => p.pattern === pattern);
+        const ready = group.filter((p) => p.ready).length;
+        return (
+          <section className="group" key={pattern}>
+            <header className="group-head">
+              <h2>{pattern}</h2>
+              <span className="progress">
+                {ready} / {group.length}
+              </span>
+            </header>
+            <div className="list">
+              {group.map((p) =>
+                p.ready ? (
+                  <Link href={`/p/${p.slug}`} key={p.slug}>
+                    <span className="num">{p.leetcode}</span>
+                    <span>{p.title}</span>
+                    <span className={`tag ${p.difficulty}`}>{p.difficulty}</span>
+                  </Link>
+                ) : (
+                  <span className="row pending" key={p.slug}>
+                    <span className="num">{p.leetcode}</span>
+                    <span>{p.title}</span>
+                    <span className={`tag ${p.difficulty}`}>{p.difficulty}</span>
+                  </span>
+                )
+              )}
+            </div>
+          </section>
+        );
+      })}
     </main>
   );
 }

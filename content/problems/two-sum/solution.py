@@ -6,8 +6,19 @@ META = {
     "leetcode": 1,
     "prompt": (
         "Given an array of integers and a target, return the indices of the two "
-        "numbers that add up to the target. Exactly one solution exists."
+        "numbers that add up to the target. Exactly one solution exists, and you "
+        "may not use the same element twice."
     ),
+    "examples": [
+        {"input": "nums = [2,7,11,15], target = 9", "output": "[0,1]",
+         "why": "nums[0] + nums[1] is 2 + 7, which is 9."},
+        {"input": "nums = [3,3], target = 6", "output": "[0,1]",
+         "why": "Equal values are fine — they are different positions."},
+    ],
+    "constraints": [
+        "2 <= len(nums) <= 10^4",
+        "Exactly one valid answer exists.",
+    ],
 }
 
 VARIANTS = [

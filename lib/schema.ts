@@ -48,6 +48,13 @@ export const Approach = z.object({
   variants: z.array(Variant).min(1),
 });
 
+/** Worked examples shown above the player, written fresh — never copied. */
+export const Example = z.object({
+  input: z.string(),
+  output: z.string(),
+  why: z.string().nullish(),
+});
+
 export const Problem = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   slug: z.string(),
@@ -57,14 +64,25 @@ export const Problem = z.object({
   difficulty: z.enum(["Easy", "Medium", "Hard"]).optional(),
   leetcode: z.number().optional(),
   prompt: z.string().optional(),
+  examples: z.array(Example).default([]),
+  constraints: z.array(z.string()).default([]),
   approaches: z.array(Approach).min(1),
 });
 
-export const Index = z.array(
-  Problem.pick({ slug: true, title: true, pattern: true }).extend({
-    difficulty: z.enum(["Easy", "Medium", "Hard"]),
-  })
-);
+export const Index = z.object({
+  patterns: z.array(z.string()),
+  problems: z.array(
+    z.object({
+      slug: z.string(),
+      title: z.string(),
+      pattern: z.string(),
+      difficulty: z.enum(["Easy", "Medium", "Hard"]),
+      leetcode: z.number(),
+      /** False until a trace exists — the roadmap shows the gap. */
+      ready: z.boolean(),
+    })
+  ),
+});
 
 export type Op = z.infer<typeof Op>;
 export type Step = z.infer<typeof Step>;

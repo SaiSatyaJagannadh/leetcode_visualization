@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "pipeline"))
 import leetviz
+import seed
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "traces"
@@ -42,7 +44,25 @@ def main():
         if not is_fixture:
             index.append({k: obj[k] for k in ("slug", "title", "pattern", "difficulty")})
     if not only:
-        leetviz.dump(sorted(index, key=lambda p: p["title"]), OUT / "index.json")
+        # The index is the whole roadmap, not just what's authored — an unbuilt
+        # problem still shows in its pattern, greyed out, so the gap is visible.
+        done = {p["slug"] for p in index}
+        roadmap = [
+            {
+                "slug": slug,
+                "title": title,
+                "pattern": pattern,
+                "difficulty": diff,
+                "leetcode": num,
+                "ready": slug in done,
+            }
+            for slug, title, pattern, diff, num, _, _ in seed.rows()
+        ]
+        missing = [p["slug"] for p in index if p["slug"] not in {r["slug"] for r in roadmap}]
+        if missing:
+            print(f"  !! not in seed: {', '.join(missing)}")
+        leetviz.dump({"patterns": seed.PATTERNS, "problems": roadmap}, OUT / "index.json")
+        print(f"\n{len(done)} / {len(roadmap)} authored")
         names = [p.stem for p in sorted(ROOT.glob("fixtures/*.py"))]
         leetviz.dump(names, OUT / "_fixtures" / "index.json")
 
