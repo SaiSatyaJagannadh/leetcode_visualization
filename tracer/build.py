@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate every trace in content/problems/ into traces/."""
 
+import gzip
 import importlib.util
 import sys
 from pathlib import Path
@@ -36,7 +37,7 @@ def main():
         obj = leetviz.build_problem(load(src))
         dest = OUT / ("_fixtures" if is_fixture else "") / f"{slug}.json"
         leetviz.dump(obj, dest)
-        kb = dest.stat().st_size / 1024
+        kb = len(gzip.compress(dest.read_bytes())) / 1024  # the budget is gzipped
         steps = max(len(v["steps"]) for a in obj["approaches"] for v in a["variants"])
         print(f"{slug:22} {len(obj['approaches'])} approaches  {steps:5} steps  {kb:6.1f} KB")
         if kb > 150:

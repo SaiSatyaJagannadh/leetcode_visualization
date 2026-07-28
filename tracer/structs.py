@@ -13,11 +13,12 @@ _next_id = _ids.__next__  # `next` is a parameter name below, so bind it here
 
 
 class ListNode:
-    __slots__ = ("val", "next", "nid", "pos")
+    __slots__ = ("val", "next", "random", "nid", "pos")
 
     def __init__(self, val=0, next=None):
         self.val = val
         self.next = next
+        self.random = None  # only used by Copy List With Random Pointer
         self.nid = _next_id()
         self.pos = None
 

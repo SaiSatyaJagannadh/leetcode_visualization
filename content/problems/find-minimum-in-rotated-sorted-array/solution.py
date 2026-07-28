@@ -20,10 +20,11 @@ VARIANTS = [
 
 
 def scan(nums):
+    #> Reading every element works, but ignores everything the sorting tells us.
     best = nums[0]
     for i in range(len(nums)):
         if nums[i] < best:
-            best = nums[i]
+            best = nums[i]  #> A new low; the rotation point is at or before here.
     return best
 
 

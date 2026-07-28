@@ -83,6 +83,8 @@ class Snapshotter:
         self.nodes[nid] = None  # reserve first: lists and trees may cycle
         if isinstance(n, ListNode):
             d = {"kind": "list", "val": self.safe(n.val), "next": self.link(n.next)}
+            if n.random is not None:
+                d["random"] = self.link(n.random)
         else:
             d = {
                 "kind": "tree",
@@ -147,23 +149,32 @@ def _notes(src, first):
 
 
 def trace(fn, args):
-    """Run fn(**args) traced. Returns (steps, result, source_lines)."""
-    src, first = inspect.getsourcelines(fn)
-    notes = _notes(src, first)
-    code = fn.__code__
+    """Run fn(**args) traced. Returns (steps, result, source_lines).
+
+    Helper functions in the same file are traced too. Without that, a problem
+    whose real work sits in a `_walk` helper would show a three-line trace of
+    the wrapper and nothing else.
+    """
+    home = fn.__code__.co_filename
+    followed = {fn.__code__: fn}
+    for value in fn.__globals__.values():
+        if inspect.isfunction(value) and value.__code__.co_filename == home:
+            followed[value.__code__] = value
+
     snap = Snapshotter()
     steps = []
     prev = {}
-    pending = first  # the line whose effects we haven't emitted yet
+    pending = fn.__code__.co_firstlineno  # the line whose effects aren't emitted yet
+    entered = {}  # code objects actually executed, so unused helpers stay hidden
 
-    # Recursion: same code object, so recursive frames are already traced. All
-    # that's missing is who called whom.
     calls = {}
     stack = []
     counter = [0]
 
     def emit(lineno, ops):
-        steps.append({"line": lineno - first, "note": notes.get(lineno), "ops": ops})
+        # Absolute file line for now; remapped to an index once we know which
+        # functions ran and can lay them out as one listing.
+        steps.append({"line": lineno, "ops": ops})
 
     def record(lineno, loc):
         # A line event fires *before* the line runs, so the state we see is the
@@ -183,6 +194,7 @@ def trace(fn, args):
     def enter(frame):
         cid = str(counter[0])
         counter[0] += 1
+        code = frame.f_code
         # Node args show their value, not a $ref — a call tree reads better as
         # solve(node=3) than solve(node={"$ref":"7"}).
         args_in = {}
@@ -194,6 +206,7 @@ def trace(fn, args):
         calls[cid] = {
             "parent": stack[-1] if stack else None,
             "depth": len(stack),
+            "fn": code.co_name,
             "args": args_in,
             "ret": None,
             "status": "active",
@@ -215,7 +228,8 @@ def trace(fn, args):
         return local_trace
 
     def global_trace(frame, event, arg):
-        if event == "call" and frame.f_code is code:
+        if event == "call" and frame.f_code in followed:
+            entered[frame.f_code] = True
             enter(frame)
             return local_trace
         return None
@@ -233,19 +247,33 @@ def trace(fn, args):
         final = dict(prev)
         final["$calls"] = json.loads(json.dumps(calls))
         _diff([], prev, final, tail)
-    if steps and steps[-1]["line"] != pending - first:
+    if steps and steps[-1]["line"] != pending:
         emit(pending, tail)  # land on the returning line
     elif tail:
         steps[-1]["ops"].extend(tail)
     if len(steps) >= MAX_STEPS:
         raise RuntimeError(f"{fn.__name__} exceeded {MAX_STEPS} steps")
 
-    # Narration renders separately: drop the `#>` lines and renumber the steps.
-    keep = [i for i, l in enumerate(src) if not l.strip().startswith("#>")]
-    remap = {old: new for new, old in enumerate(keep)}
+    # Lay every function that ran into one listing, in file order, so a step in
+    # a helper highlights the right line. Helpers that never ran stay out.
+    shown = []
+    index_of = {}
+    notes = {}
+    for pos, code_obj in enumerate(sorted(entered, key=lambda c: c.co_firstlineno)):
+        if pos:
+            shown.append("")  # blank line between functions
+        src, first = inspect.getsourcelines(followed[code_obj])
+        notes.update(_notes(src, first))
+        for off, line in enumerate(src):
+            if line.strip().startswith("#>"):
+                continue  # narration renders separately
+            index_of[first + off] = len(shown)
+            shown.append(line.split("#>")[0].rstrip())
+
     for s in steps:
-        s["line"] = remap[s["line"]]
-    return steps, _result(result, snap), [src[i].split("#>")[0].rstrip() for i in keep]
+        s["note"] = notes.get(s["line"])
+        s["line"] = index_of.get(s["line"], 0)
+    return steps, _result(result, snap), shown
 
 
 def _result(v, snap):

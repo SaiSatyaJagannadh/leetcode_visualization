@@ -167,9 +167,15 @@ export function fromNodes(nodes: Nodes, marks: Record<string, string[]>, hot: Se
       hot: hot.has(id),
       marks: marks[id],
     });
-    for (const side of ["next", "left", "right"]) {
+    for (const side of ["next", "left", "right", "random"]) {
       const to = ref(n[side]);
-      if (to) de.push({ from: id, to, label: side === "next" ? undefined : side[0], hot: hot.has(id) });
+      if (to)
+        de.push({
+          from: id,
+          to,
+          label: side === "next" ? undefined : side === "random" ? "rand" : side[0],
+          hot: hot.has(id),
+        });
     }
   }
   return { nodes: dn, edges: de };

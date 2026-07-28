@@ -21,8 +21,11 @@ VARIANTS = [
 
 def brute_force(numbers, target):
     for i in range(len(numbers)):
+        #> Anchor on one number and try every partner to its right.
         for j in range(i + 1, len(numbers)):
             if numbers[i] + numbers[j] == target:
+                #> Found it — but note this never once used the fact that the
+                #> array is sorted, which is the whole point of the problem.
                 return [i + 1, j + 1]
     return []
 

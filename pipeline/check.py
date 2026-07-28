@@ -48,4 +48,30 @@ for line in slow:
 for line in failed:
     print(f"  FAIL  {line}")
 print(f"\n{len(failed)} disagreements, {len(slow)} over {LONG} steps")
-sys.exit(1 if failed else 0)
+
+# --- content sweep -------------------------------------------------------
+
+gaps = []
+for path in sorted((ROOT / "traces").glob("*.json")):
+    if path.name == "index.json":
+        continue
+    p = json.loads(path.read_text())
+    slug = p["slug"]
+    if not p.get("prompt"):
+        gaps.append(f"{slug}: no prompt")
+    if len(p.get("examples", [])) < 2:
+        gaps.append(f"{slug}: fewer than 2 examples")
+    if not p.get("constraints"):
+        gaps.append(f"{slug}: no constraints")
+    for a in p["approaches"]:
+        narrated = sum(1 for v in a["variants"] for s in v["steps"] if s["note"])
+        if narrated == 0:
+            gaps.append(f"{slug}/{a['id']}: no narration")
+        if len(a["variants"]) < 3:
+            gaps.append(f"{slug}/{a['id']}: {len(a['variants'])} variants, expected 3")
+
+for g in gaps:
+    print(f"  gap   {g}")
+print(f"{len(gaps)} content gaps")
+
+sys.exit(1 if failed or gaps else 0)
