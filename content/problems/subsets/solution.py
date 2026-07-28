@@ -15,6 +15,7 @@ META = {
         {"input": "nums = [0]", "output": "[[],[0]]"},
     ],
     "constraints": ["1 <= len(nums) <= 10", "All values are distinct"],
+    "unordered": True,  # subsets may come back in any order
 }
 
 VARIANTS = [

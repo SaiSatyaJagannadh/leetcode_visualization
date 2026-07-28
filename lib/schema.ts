@@ -65,6 +65,8 @@ export const Problem = z.object({
   leetcode: z.number().optional(),
   prompt: z.string().optional(),
   examples: z.array(Example).default([]),
+  /** True when the answer is a set: the cross-check compares order-insensitively. */
+  unordered: z.boolean().optional(),
   constraints: z.array(z.string()).default([]),
   approaches: z.array(Approach).min(1),
 });

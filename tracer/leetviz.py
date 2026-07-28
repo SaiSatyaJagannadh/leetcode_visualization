@@ -245,7 +245,35 @@ def trace(fn, args):
     remap = {old: new for new, old in enumerate(keep)}
     for s in steps:
         s["line"] = remap[s["line"]]
-    return steps, snap.safe(result), [src[i].split("#>")[0].rstrip() for i in keep]
+    return steps, _result(result, snap), [src[i].split("#>")[0].rstrip() for i in keep]
+
+
+def _result(v, snap):
+    """Returned nodes expand into their values — a $ref tells the reader nothing."""
+    if isinstance(v, ListNode):
+        out = []
+        seen = set()
+        node = v
+        while node is not None and node.nid not in seen:
+            seen.add(node.nid)
+            out.append(snap.safe(node.val))
+            node = node.next
+        if node is not None:
+            out.append("…cycle")
+        return out
+    if isinstance(v, TreeNode):
+        # Level order with nulls, the same shape build_tree accepts.
+        out, level = [], [v]
+        while any(n is not None for n in level):
+            nxt = []
+            for n in level:
+                out.append(None if n is None else snap.safe(n.val))
+                nxt.extend([None, None] if n is None else [n.left, n.right])
+            level = nxt
+        while out and out[-1] is None:
+            out.pop()
+        return out
+    return snap.safe(v)
 
 
 def circle_layout(keys):

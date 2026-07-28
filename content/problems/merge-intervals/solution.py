@@ -61,7 +61,8 @@ def brute_force(intervals):
                     break
             if merged:
                 break
-    return out
+    #> Sorted at the end so the answer is canonical, like the sweep's.
+    return sorted(out, key=lambda s: s[0])
 
 
 APPROACHES = [
