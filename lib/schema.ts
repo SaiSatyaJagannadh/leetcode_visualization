@@ -82,6 +82,8 @@ export const Index = z.object({
       leetcode: z.number(),
       /** False until a trace exists — the roadmap shows the gap. */
       ready: z.boolean(),
+      /** LeetCode's own slug, for the outbound link to the official statement. */
+      lc: z.string(),
     })
   ),
 });

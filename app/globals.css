@@ -50,6 +50,8 @@ h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; }
 .tag.Medium { color: var(--hot); border-color: #5a3a1a; }
 .tag.Hard { color: #f85149; border-color: #5a1f22; }
 .prompt { color: var(--dim); max-width: 70ch; margin-bottom: 26px; }
+.tag.link { color: var(--accent); border-color: #2b4d75; }
+.tag.link:hover { border-color: var(--accent); background: #58a6ff14; }
 
 /* --- tabs -------------------------------------------------------------- */
 
@@ -180,10 +182,18 @@ pre.code .ln.on { background: #58a6ff1f; border-left-color: var(--accent); }
 
 /* --- roadmap ------------------------------------------------------------ */
 
-.group { margin-top: 34px; }
-.group-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
-.group-head h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
-.progress { font: 12px var(--mono); color: #5a6472; }
+.group { margin-top: 10px; border-bottom: 1px solid var(--line); }
+.group summary {
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  padding: 13px 4px; list-style: none;
+}
+.group summary::-webkit-details-marker { display: none; }
+.group summary:hover h2 { color: var(--accent); }
+.group summary h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.group .chev { color: #5a6472; font-size: 11px; transition: transform 0.15s; width: 10px; }
+.group[open] .chev { transform: rotate(90deg); }
+.group[open] { padding-bottom: 14px; }
+.progress { margin-left: auto; font: 12px var(--mono); color: #5a6472; }
 .list { display: grid; gap: 6px; }
 .list a, .list .row {
   display: flex; align-items: center; gap: 14px;

@@ -56,8 +56,9 @@ def main():
                 "difficulty": diff,
                 "leetcode": num,
                 "ready": slug in done,
+                "lc": lc,
             }
-            for slug, title, pattern, diff, num, _, _ in seed.rows()
+            for slug, title, pattern, diff, num, lc, _, _ in seed.rows()
         ]
         missing = [p["slug"] for p in index if p["slug"] not in {r["slug"] for r in roadmap}]
         if missing:

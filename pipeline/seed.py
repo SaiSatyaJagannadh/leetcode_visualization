@@ -219,6 +219,19 @@ SEED = {
 }
 
 
+# Where our slug differs from LeetCode's, so the outbound links don't 404.
+LC_SLUG = {
+    "two-sum-ii": "two-sum-ii-input-array-is-sorted",
+    "construct-binary-tree-from-preorder-and-inorder":
+        "construct-binary-tree-from-preorder-and-inorder-traversal",
+    "buy-and-sell-stock-with-cooldown": "best-time-to-buy-and-sell-stock-with-cooldown",
+    "design-add-and-search-words": "design-add-and-search-words-data-structure",
+    "implement-trie": "implement-trie-prefix-tree",
+    "lowest-common-ancestor-of-a-bst": "lowest-common-ancestor-of-a-binary-search-tree",
+    "number-of-connected-components": "number-of-connected-components-in-an-undirected-graph",
+}
+
+
 def slugify(title):
     keep = "".join(c if c.isalnum() or c in " -" else "" for c in title.lower())
     return "-".join(keep.split())
@@ -228,7 +241,8 @@ def rows():
     """(slug, title, pattern, difficulty, leetcode, pattern_order, order)."""
     for pi, pattern in enumerate(PATTERNS):
         for i, (num, title, diff) in enumerate(SEED[pattern]):
-            yield slugify(title), title, pattern, diff, num, pi, i
+            slug = slugify(title)
+            yield slug, title, pattern, diff, num, LC_SLUG.get(slug, slug), pi, i
 
 
 if __name__ == "__main__":

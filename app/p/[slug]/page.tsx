@@ -8,7 +8,10 @@ export const generateStaticParams = () =>
     .map((p) => ({ slug: p.slug }));
 
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
-  const problem = getProblem((await params).slug);
+  const { slug } = await params;
+  const problem = getProblem(slug);
+  // The official wording lives on LeetCode; link to it rather than copying it.
+  const lc = getIndex().problems.find((p) => p.slug === slug)?.lc ?? slug;
   return (
     <main>
       <Link className="crumb" href="/">
@@ -18,7 +21,22 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
       <div className="meta">
         <span className={`tag ${problem.difficulty}`}>{problem.difficulty}</span>
         <span className="tag">{problem.pattern}</span>
-        <span className="tag">LeetCode {problem.leetcode}</span>
+        <a
+          className="tag link"
+          href={`https://leetcode.com/problems/${lc}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          LeetCode {problem.leetcode} ↗
+        </a>
+        <a
+          className="tag link"
+          href={`https://neetcode.io/problems/${lc}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          NeetCode ↗
+        </a>
       </div>
       <p className="prompt">{problem.prompt}</p>
 

@@ -17,13 +17,17 @@ export default function Home() {
         const group = problems.filter((p) => p.pattern === pattern);
         const ready = group.filter((p) => p.ready).length;
         return (
-          <section className="group" key={pattern}>
-            <header className="group-head">
+          // <details> gives collapsible topics with no JS and no hydration cost.
+          <details className="group" key={pattern}>
+            <summary>
+              <span className="chev" aria-hidden="true">
+                ▸
+              </span>
               <h2>{pattern}</h2>
               <span className="progress">
                 {ready} / {group.length}
               </span>
-            </header>
+            </summary>
             <div className="list">
               {group.map((p) =>
                 p.ready ? (
@@ -41,7 +45,7 @@ export default function Home() {
                 )
               )}
             </div>
-          </section>
+          </details>
         );
       })}
     </main>
