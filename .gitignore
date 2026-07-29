@@ -433,3 +433,4 @@ FodyWeavers.xsd
 out/
 .env
 .next-build/
+graphify-out/

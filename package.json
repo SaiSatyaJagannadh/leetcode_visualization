@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "python3 tracer/build.py && NEXT_DIST=.next-build next build",
+    "build": "python3 tracer/build.py && NEXT_DIST=${NEXT_DIST:-.next-build} next build",
     "start": "next start",
     "trace": "python3 tracer/build.py",
     "check": "python3 pipeline/check.py"
