@@ -1,10 +1,9 @@
 /** @type {import('next').NextConfig} */
 export default {
-  output: "export",
+  // No `output: "export"` — the target is Vercel, which prerenders the static
+  // pages at build time and runs /api/*.py as Python functions alongside them.
+  // No `basePath` either: that existed only for the GitHub Pages subpath.
   images: { unoptimized: true },
   // A production build would otherwise clobber the running dev server's chunks.
   distDir: process.env.NEXT_DIST || ".next",
-  // Pages serves this repo under /leetcode_visualization, but dev serves it at
-  // the root. Only the deploy workflow sets BASE_PATH, so `pnpm dev` stays plain.
-  basePath: process.env.BASE_PATH || undefined,
 };

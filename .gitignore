@@ -434,3 +434,6 @@ out/
 .env
 .next-build/
 graphify-out/
+
+# Vercel
+.vercel

@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# No deploy step. Vercel deploys from its own git integration; this workflow
+# only decides whether the commit is allowed to be green.
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pnpm install --frozen-lockfile
+
+      # pipeline/check.py is the test suite: every approach of a problem must
+      # agree on every variant, and no content gaps.
+      - run: pnpm check
+      - run: pnpm test
+
+      # `pnpm build` regenerates every trace with python3 before next build, so
+      # a solution.py that stops tracing fails CI instead of silently shipping
+      # the last good JSON. NEXT_DIST=.next because the .next-build default
+      # exists only to protect a local dev server; CI has none.
+      - run: pnpm build
+        env:
+          NEXT_DIST: .next
+
+      # A server-only key that leaks into a client chunk is public the moment it
+      # deploys. Fail the build instead. `out/` is gone with `output: export`,
+      # so the client bundle now lives in .next/static.
+      - name: Scan client bundle for leaked keys
+        run: |
+          if grep -rlE 'sk-[A-Za-z0-9_-]{16,}' .next/static/ ; then
+            echo "::error::API key found in client bundle - refusing to ship"
+            exit 1
+          fi
+          echo "No leaked keys in .next/static"
