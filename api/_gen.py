@@ -26,6 +26,7 @@ import hashlib
 import json
 import os
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -232,6 +233,24 @@ def messages(problem_text, art):
 # --------------------------------------------------------------------------- #
 
 
+def _ssl_context():
+    """A python.org macOS build ships no CA bundle until someone runs
+    Install Certificates.command, so every HTTPS call dies with
+    CERTIFICATE_VERIFY_FAILED. Prefer certifi's bundle when it is importable;
+    fall back to the system default, which is what Vercel's Linux runtime uses.
+    Never disable verification — an unverified call to an API we send a key to
+    is worse than a failing one."""
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+_SSL = _ssl_context()
+
+
 def _post(payload, key, timeout=180):
     req = urllib.request.Request(
         API_URL,
@@ -239,7 +258,7 @@ def _post(payload, key, timeout=180):
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
         return json.load(r)
 
 

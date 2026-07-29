@@ -2,7 +2,8 @@
   "name": "leetviz",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "python3 pipeline/devserver.py & trap 'kill %1 2>/dev/null' EXIT INT TERM; next dev",
+    "dev:api": "python3 pipeline/devserver.py",
     "build": "pnpm run schema -- --check && python3 tracer/build.py && NEXT_DIST=${NEXT_DIST:-.next-build} next build",
     "start": "next start",
     "trace": "python3 tracer/build.py",

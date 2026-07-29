@@ -5,7 +5,8 @@
   "functions": {
     "api/**/*.py": {
       "runtime": "@vercel/python@4.3.0",
-      "includeFiles": "{tracer/**,traces/**,prompts/**}"
+      "includeFiles": "{tracer/**,traces/**,prompts/**}",
+      "maxDuration": 300
     }
   }
 }
