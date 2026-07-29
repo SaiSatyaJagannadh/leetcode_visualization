@@ -214,3 +214,56 @@ pre.code .ln.on { background: #58a6ff1f; border-left-color: var(--accent); }
 .example .why { color: var(--dim); font-family: inherit; }
 .constraints { color: var(--dim); font: 12px var(--mono); margin-bottom: 26px; }
 .constraints li { margin-left: 18px; }
+
+/* --- /solve ------------------------------------------------------------ */
+
+/* .tag was written for a <span>. On a <button> or <input> the UA still
+   supplies its own background and font, which is why they rendered as pale
+   pills on a dark page. Element-qualified so .tag.link keeps winning on colour. */
+button.tag, input.tag {
+  background: transparent; font: inherit; font-size: 13px;
+  line-height: 1.6; cursor: pointer;
+}
+input.tag { cursor: text; min-width: 30ch; font-family: var(--mono); font-size: 12px; }
+button.tag:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Deliberately not `.prompt`: that class styles the statement paragraph on
+   /p/[slug] and left this control with browser defaults. */
+.ask {
+  display: block; width: 100%; max-width: 70ch; min-height: 132px;
+  padding: 14px 16px; margin-bottom: 4px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--fg);
+  font: 14px/1.6 var(--mono); resize: vertical;
+}
+.ask::placeholder { color: var(--dim); }
+.ask:focus-visible {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px #58a6ff26;
+}
+
+/* The gate chain, reported not mimed — the server says which ones ran. */
+.gates {
+  display: flex; flex-wrap: wrap; align-items: center;
+  margin: 2px 0 20px; padding: 0; list-style: none;
+  font: 12px/1 var(--mono); color: var(--dim);
+}
+.gate { display: flex; align-items: center; gap: 7px; padding: 6px 0; }
+.gate::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--line); flex: none;
+}
+.gate::after {
+  content: ""; width: 16px; height: 1px; margin: 0 9px;
+  background: var(--line); flex: none;
+}
+.gate:last-child::after { display: none; }
+.gate.cleared { color: var(--ok); }
+.gate.cleared::before { background: var(--ok); }
+.gate.live { color: var(--hot); }
+.gate.live::before { background: var(--hot); animation: gate-pulse 1.3s ease-in-out infinite; }
+.gate .secs { color: var(--dim); }
+
+@keyframes gate-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+@media (prefers-reduced-motion: reduce) {
+  .gate.live::before { animation: none; }
+}

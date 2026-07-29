@@ -22,6 +22,35 @@ function useTrace() {
   return { trace, setTrace, fail, setFail, busy, setBusy };
 }
 
+/**
+ * The gate chain from api/_lib.solve(), in the order it actually runs. The
+ * server returns which of these it entered, so this reports rather than mimes:
+ * a cache hit visibly stops at `cache`, having cost nothing.
+ */
+const GATES = ["turnstile", "hash", "cache", "quota", "cap", "generate", "record"];
+
+function Gates({ ran, busy, secs }: { ran: string[] | null; busy: boolean; secs: number }) {
+  if (!ran && !busy) return null;
+  // While the request is open we have no audit yet. Everything before
+  // `generate` is sub-millisecond, so once we're a second in, those gates
+  // provably passed — a failure would already have come back.
+  const live = busy && secs >= 1;
+  return (
+    <ol className="gates" aria-label="Request pipeline">
+      {GATES.map((g) => {
+        const done = ran ? ran.includes(g) : live && GATES.indexOf(g) < GATES.indexOf("generate");
+        const now = !ran && live && g === "generate";
+        return (
+          <li key={g} className={`gate${done ? " cleared" : ""}${now ? " live" : ""}`}>
+            {g}
+            {now && <span className="secs">{secs}s</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /** Honest copy per status. A 503 is the spend cap, not "try again later". */
 function Problem_({ status, fail }: { status: number; fail: Fail }) {
   if (status === 402)
@@ -43,6 +72,13 @@ function Problem_({ status, fail }: { status: number; fail: Fail }) {
       </p>
     );
   if (status === 403) return <p className="note">Captcha check failed. Reload and try again.</p>;
+  if (status === 429)
+    return (
+      <p className="note">
+        OpenAI is rate-limiting this key. Nothing was charged and your daily
+        allowance is untouched. Wait a minute and trace it again, or use your own key below.
+      </p>
+    );
   return <p className="note">{fail.error}</p>;
 }
 
@@ -53,6 +89,8 @@ export function SolveForm() {
   const [hash, setHash] = useState("");
   const [byo, setByo] = useState("");
   const [token, setToken] = useState("");
+  const [gates, setGates] = useState<string[] | null>(null);
+  const [secs, setSecs] = useState(0);
 
   useEffect(() => setByo(localStorage.getItem(BYO_STORE) ?? ""), []);
   useEffect(() => {
@@ -68,6 +106,7 @@ export function SolveForm() {
     setBusy(true);
     setFail(null);
     setTrace(null);
+    setGates(null);
     const res = await fetch("/api/solve", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(byo ? { "x-byo-key": byo } : {}) },
@@ -75,6 +114,7 @@ export function SolveForm() {
     });
     const body = await res.json();
     setStatus(res.status);
+    setGates(body.gates ?? null);
     if (res.ok) {
       setHash(body.hash);
       setTrace(Problem.parse(body.trace));
@@ -82,15 +122,25 @@ export function SolveForm() {
     setBusy(false);
   }, [prompt, byo, token, setBusy, setFail, setTrace]);
 
+  // A generation runs ~45s. Without a moving number the page reads as hung,
+  // which is exactly how this looked before.
+  useEffect(() => {
+    if (!busy) return setSecs(0);
+    const t = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [busy]);
+
   return (
     <>
       {SITE_KEY && (
         <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" defer />
       )}
+      {/* Not `.prompt` — that class styles the problem statement paragraph on
+          /p/[slug], and reusing it here left the textarea with browser defaults. */}
       <textarea
-        className="prompt"
-        rows={4}
-        placeholder="Describe the problem you want traced."
+        className="ask"
+        rows={6}
+        placeholder="Paste a problem statement. Constraints and worked examples make the trace better."
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
       />
@@ -107,6 +157,7 @@ export function SolveForm() {
           </a>
         )}
       </p>
+      <Gates ran={gates} busy={busy} secs={secs} />
 
       {fail && (
         <>

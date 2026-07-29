@@ -22,4 +22,8 @@ class handler(_lib.JSONHandler):
             byo_key=byo,
         )
         _lib.log(f"solve {status} gates={'>'.join(audit)} byo={bool(byo)}", byo)
+        # The UI shows which gates ran, so a cache hit reads as "stopped at
+        # cache, cost nothing" instead of an unexplained instant result. Gate
+        # names only — no quota counts, no spend, nothing a caller shouldn't see.
+        out["gates"] = audit
         self.reply(status, out, set_cookie)

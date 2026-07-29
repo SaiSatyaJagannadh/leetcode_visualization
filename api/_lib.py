@@ -54,6 +54,7 @@ CACHE_TTL = 30 * DAY_TTL
 #   200 cache hit (body.cached == true) or fresh generation
 #   402 per-session/IP daily quota exhausted — body carries the BYO-key path
 #   503 global monthly spend cap reached, free tier off — BYO key still works
+#   429 upstream rate limit — not our bug, nothing charged
 #   502 generation failed
 #   401 admin endpoint, bad or missing shared secret
 
@@ -346,6 +347,11 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
         trace, cost, usage = generate(prompt, byo_key)
     except Exception as e:  # noqa: BLE001 — the reason must not leak the key
         log(f"generation failed: {type(e).__name__}: {e}", byo_key)
+        # "generation failed" is true of every branch here and useful in none.
+        # A rate limit is the one a caller can act on, and it is not our bug,
+        # so name it. The upstream text is never echoed — it can quote the key.
+        if getattr(e, "code", None) == 429:
+            return 429, {"error": "rate-limited"}, audit
         return 502, {"error": "generation failed"}, audit
 
     # 7. record spend + decrement quota
