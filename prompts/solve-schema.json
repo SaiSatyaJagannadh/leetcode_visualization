@@ -1,0 +1,432 @@
+{
+  "name": "leetviz_trace",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "schemaVersion": {
+        "type": "number",
+        "enum": [
+          1
+        ]
+      },
+      "slug": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "pattern": {
+        "type": "string"
+      },
+      "difficulty": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": [
+              "Easy",
+              "Medium",
+              "Hard"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "x-optional": true
+      },
+      "leetcode": {
+        "type": [
+          "number",
+          "null"
+        ],
+        "x-optional": true
+      },
+      "prompt": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "x-optional": true
+      },
+      "examples": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "string"
+            },
+            "output": {
+              "type": "string"
+            },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "x-optional": true
+            }
+          },
+          "required": [
+            "input",
+            "output",
+            "why"
+          ],
+          "additionalProperties": false
+        },
+        "x-optional": true
+      },
+      "unordered": {
+        "type": [
+          "boolean",
+          "null"
+        ],
+        "x-optional": true
+      },
+      "constraints": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "x-optional": true
+      },
+      "approaches": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "complexity": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "type": "string"
+                },
+                "space": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "time",
+                "space"
+              ],
+              "additionalProperties": false
+            },
+            "viz": {
+              "type": "object",
+              "properties": {
+                "$entries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "$entries"
+              ],
+              "additionalProperties": false
+            },
+            "layout": {
+              "type": "object",
+              "properties": {
+                "$entries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "object",
+                        "properties": {
+                          "$entries": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "key": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "object",
+                                  "properties": {
+                                    "_0": {
+                                      "type": "number"
+                                    },
+                                    "_1": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "_0",
+                                    "_1"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "value"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "$entries"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "value"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "$entries"
+              ],
+              "additionalProperties": false
+            },
+            "source": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "variants": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "x-optional": true
+                  },
+                  "result": {
+                    "$ref": "#/$defs/Rec0"
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "line": {
+                          "type": "number"
+                        },
+                        "note": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "ops": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "_0": {
+                                    "type": "string",
+                                    "enum": [
+                                      "set"
+                                    ]
+                                  },
+                                  "_1": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "_2": {
+                                    "$ref": "#/$defs/Rec0"
+                                  }
+                                },
+                                "required": [
+                                  "_0",
+                                  "_1",
+                                  "_2"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "_0": {
+                                    "type": "string",
+                                    "enum": [
+                                      "del"
+                                    ]
+                                  },
+                                  "_1": {
+                                    "type": "array",
+                                    "items": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "number"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "_0",
+                                  "_1"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "line",
+                        "note",
+                        "ops"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "id",
+                  "label",
+                  "note",
+                  "result",
+                  "steps"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "id",
+            "label",
+            "complexity",
+            "viz",
+            "layout",
+            "source",
+            "variants"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "slug",
+      "title",
+      "pattern",
+      "difficulty",
+      "leetcode",
+      "prompt",
+      "examples",
+      "unordered",
+      "constraints",
+      "approaches"
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "Rec0": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          },
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Rec0"
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "$entries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "key": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "$ref": "#/$defs/Rec0"
+                    }
+                  },
+                  "required": [
+                    "key",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "$entries"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  }
+}

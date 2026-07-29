@@ -3,11 +3,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "python3 tracer/build.py && NEXT_DIST=${NEXT_DIST:-.next-build} next build",
+    "build": "pnpm run schema -- --check && python3 tracer/build.py && NEXT_DIST=${NEXT_DIST:-.next-build} next build",
     "start": "next start",
     "trace": "python3 tracer/build.py",
-    "check": "python3 pipeline/check.py",
-    "test": "python3 pipeline/test_solve.py"
+    "check": "python3 pipeline/check.py && pnpm run schema -- --check",
+    "test": "python3 pipeline/test_solve.py",
+    "schema": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON pipeline/schema-json.mts"
   },
   "dependencies": {
     "next": "^15.5.4",
