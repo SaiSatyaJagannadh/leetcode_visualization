@@ -9,8 +9,10 @@ appends each gate it *enters* to an `audit` list. `pipeline/test_solve.py`
 asserts on that list, so a reordering bug fails the test even when every status
 code stays the same.
 
-Generation is STUBBED this pass: it returns the committed two-sum trace. The
-meter is built before the faucet on purpose — no OpenAI call exists yet.
+Generation itself lives in `_gen.py` — the prompt, the structured-output call,
+the decode, the semantic validation and the repair ladder. This module still
+decides *whether* it runs. `_gen` is imported lazily so the cycle stays
+one-directional and `/api/admin/spend` never pays for it.
 """
 
 import hashlib
@@ -39,8 +41,9 @@ for _p in (str(ROOT / "tracer"), str(ROOT / "pipeline")):
 IS_PROD = os.environ.get("VERCEL_ENV") == "production"
 FREE_PER_DAY = int(os.environ.get("SOLVE_FREE_PER_DAY", "5"))
 MONTHLY_CAP_USD = float(os.environ.get("SOLVE_MONTHLY_USD_CAP", "25"))
-# Placeholder unit cost so the meter, the cap and /admin/spend are exercisable
-# before a real API call exists. The real per-call cost replaces this.
+# Fallback unit cost, used when SOLVE_PRICE_*_PER_MTOK are unset and by the
+# offline dev generator. An unpriced call must not count as free, or the cap
+# stops capping.
 STUB_COST_USD = float(os.environ.get("SOLVE_STUB_COST_USD", "0.02"))
 DAY_TTL = 86_400
 CACHE_TTL = 30 * DAY_TTL
@@ -214,10 +217,19 @@ def anon(s):
 
 
 def prompt_hash(prompt):
-    """Normalize + hash. ponytail: the cheap-model canonicalisation is stubbed;
-    for now whitespace collapse + casefold, which already collapses the common
-    'two sum' / 'Two  Sum' duplicates. Swap the body, keep the signature."""
-    return hashlib.sha256(" ".join(prompt.split()).casefold().encode()).hexdigest()[:16]
+    """Normalize + hash. OPENAI_MODEL_CHEAP canonicalises 'find the two indices
+    that sum to k' onto the same cache key as 'Two Sum'; whitespace collapse +
+    casefold is the floor it falls back to when the cheap model is unavailable.
+
+    ponytail: an LLM in the cache key is only as stable as the model's output.
+    Temperature is default and the answer is a short canonical title, which is
+    stable in practice; a drift shows up as a cache miss, never as a wrong trace.
+    """
+    import _gen  # deferred: _gen imports this module
+
+    return hashlib.sha256(
+        " ".join((_gen.canonical(prompt) or prompt).split()).casefold().encode()
+    ).hexdigest()[:16]
 
 
 # --------------------------------------------------------------------------- #
@@ -248,17 +260,15 @@ def verify_turnstile(token, ip):
         return False
 
 
-FIXTURE = ROOT / "traces" / "two-sum.json"
-
-
 def generate(prompt, byo_key=None):
-    """STUB. Returns the committed two-sum trace and a placeholder cost.
+    """Returns (trace, cost_usd, usage). The work is in `_gen.generate`.
 
-    The OpenAI call and the trace-it-with-tracer/leetviz.py step land in a later
-    pass. `byo_key` is accepted and deliberately never stored, never logged and
-    never echoed — it exists here only so the redaction path is real.
+    `byo_key` is passed straight through as the API credential and is never
+    stored, never logged and never echoed — the redaction path is real.
     """
-    return json.loads(FIXTURE.read_text()), (0.0 if byo_key else STUB_COST_USD)
+    import _gen  # deferred: _gen imports this module
+
+    return _gen.generate(prompt, byo_key)
 
 
 def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
@@ -333,7 +343,7 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
     # 6. generate — the first expensive thing in this function
     audit.append("generate")
     try:
-        trace, cost = generate(prompt, byo_key)
+        trace, cost, usage = generate(prompt, byo_key)
     except Exception as e:  # noqa: BLE001 — the reason must not leak the key
         log(f"generation failed: {type(e).__name__}: {e}", byo_key)
         return 502, {"error": "generation failed"}, audit
@@ -343,14 +353,26 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
     # can each pass gate 4. Upgrade path is an atomic INCR at the gate with a
     # refund when a later gate rejects; not worth it at 5/day.
     audit.append("record")
+    ver = prompt_version()
     store.set(f"cache:{h}", json.dumps(trace), CACHE_TTL)
+    store.set(f"promptver:{h}", ver, CACHE_TTL)  # trace a bad generation to its prompt
     store.incr(f"stat:{m}:{'byo' if byo_key else 'gen'}", 1)
+    # Token counters are recorded for BYO too: they are usage, not spend.
+    for name in ("prompt", "cached", "out_total", "out_visible", "reasoning", "calls"):
+        if usage.get(name):
+            store.incr(f"tok:{m}:{name}", int(usage[name]))
     if not byo_key:
         store.incr(qs, 1, DAY_TTL)
         store.incr(qi, 1, DAY_TTL)
         store.incr(f"spend:{m}", float(cost))
         store.incr(f"spend:{d}", float(cost), 40 * DAY_TTL)
-    return 200, {"hash": h, "cached": False, "trace": trace}, audit
+    return 200, {"hash": h, "cached": False, "promptVersion": ver, "trace": trace}, audit
+
+
+def prompt_version():
+    import _gen  # deferred: _gen imports this module
+
+    return _gen.prompt_version()
 
 
 def spend_report():
@@ -361,10 +383,18 @@ def spend_report():
     hit = num(store.get(f"stat:{m}:hit"))
     byo = num(store.get(f"stat:{m}:byo"))
     served = hit + gen + byo
+    tok = {k: num(store.get(f"tok:{m}:{k}")) for k in
+           ("prompt", "cached", "out_total", "out_visible", "reasoning", "calls")}
+    import _gen  # deferred: _gen imports this module
+
     return {
         "month": m,
         "spendTodayUsd": round(num(store.get(f"spend:{d}")), 4),
         "spendMonthUsd": round(month, 4),
+        # The cheap normalize model runs on the hash gate, before the cache gate,
+        # so it bills on cache hits too. Counted apart so a hit still costs the
+        # generation budget nothing — see CLAUDE.md.
+        "normalizeSpendMonthUsd": round(num(store.get(f"norm:{m}:usd")), 6),
         "capUsd": MONTHLY_CAP_USD,
         "headroomUsd": round(max(0.0, MONTHLY_CAP_USD - month), 4),
         "capReached": month >= MONTHLY_CAP_USD,
@@ -377,6 +407,22 @@ def spend_report():
         "costPerGenerationUsd": round(month / gen, 6) if gen else None,
         "freePerDay": FREE_PER_DAY,
         "store": type(store).__name__,
+        # --- token accounting. Reasoning tokens bill as output but never appear
+        # in the response, so the visible count is NOT the billed count.
+        "promptTokensMonth": int(tok["prompt"]),
+        "cachedPromptTokensMonth": int(tok["cached"]),
+        "promptCacheRate": round(tok["cached"] / tok["prompt"], 4) if tok["prompt"] else None,
+        "outputTokensMonthBilled": int(tok["out_total"]),
+        "outputTokensMonthVisible": int(tok["out_visible"]),
+        "reasoningTokensMonth": int(tok["reasoning"]),
+        "modelCallsMonth": int(tok["calls"]),
+        "callsPerGeneration": round(tok["calls"] / (gen + byo), 3) if (gen + byo) else None,
+        # --- provenance: which prompt and which models are live right now
+        "promptVersion": _gen.prompt_version(),
+        "modelCheap": _gen.model("CHEAP") or "(unset — local canonicalisation)",
+        "modelGenerate": _gen.model("GENERATE") or "(unset — offline dev generator)",
+        "modelRepair": _gen.model("REPAIR") or "(unset)",
+        "maxOutputTokens": _gen.MAX_OUTPUT_TOKENS,
     }
 
 
