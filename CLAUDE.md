@@ -9,6 +9,7 @@ pnpm dev              # Next.js dev server (uses .next)
 pnpm trace            # regenerate every trace in traces/ from content/problems/
 python3 tracer/build.py two-sum reverse-linked-list   # regenerate only these slugs
 pnpm check            # correctness gate: cross-check approaches + content sweep
+pnpm test             # gate-order / quota / redaction tests for /api/solve
 pnpm build            # pnpm trace, then `next build` into .next-build
 ```
 
@@ -102,6 +103,29 @@ player).
 `/dev/gallery/[kind]` renders the hand-written `fixtures/*.py` programs — that's
 where renderers get exercised against degenerate cases without real content.
 Note Next.js treats `_`-prefixed folders as private, hence `dev` not `_dev`.
+
+### `/solve` and the cost guards
+
+The deploy target is Vercel, not Pages — there is no `output: "export"` and no
+`basePath`. `/`, `/p/[slug]` and the gallery still prerender as static HTML;
+only `/s/[hash]` renders on demand, and it fetches everything client-side.
+
+Server code is Python in `/api/*.py` at the repo root (Vercel's runtime
+convention, wired up in `vercel.json`), not in `app/`. `api/_lib.py` is the one
+place KV is touched and the one place the gate chain lives:
+
+```
+turnstile → normalize+hash → cache → quota → monthly cap → generate → record
+```
+
+`solve()` appends every gate it enters to an `audit` list and `pipeline/
+test_solve.py` asserts on that list, so reordering the gates fails the test even
+when every status code is unchanged. Two invariants that pass silently if broken:
+a cache hit must not touch quota or spend, and a bring-your-own key must never
+reach KV, a log line or an error body. Both have tests; keep them.
+
+Generation is a stub returning `traces/two-sum.json`. There is no OpenAI call
+yet — the meter was built before the faucet on purpose.
 
 ## Content rules
 

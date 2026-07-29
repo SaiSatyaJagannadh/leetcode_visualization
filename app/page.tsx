@@ -10,7 +10,8 @@ export default function Home() {
       <h1 className="brand">LeetViz</h1>
       <p className="tagline">
         Step through the algorithm, one line at a time. {done} of {problems.length}{" "}
-        problems traced across {patterns.length} patterns.
+        problems traced across {patterns.length} patterns.{" "}
+        <Link href="/solve">Trace one of your own →</Link>
       </p>
 
       {patterns.map((pattern) => {
