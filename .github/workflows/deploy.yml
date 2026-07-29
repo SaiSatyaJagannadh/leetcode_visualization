@@ -38,6 +38,15 @@ jobs:
           # under the default. The .next-build guard exists to protect a local
           # dev server; CI has none.
           NEXT_DIST: .next
+      # A server-only key that leaks into a client chunk is public the moment
+      # it deploys. Fail the build instead, before anything is uploaded.
+      - name: Scan client bundle for leaked keys
+        run: |
+          if grep -rlE 'sk-[A-Za-z0-9_-]{16,}' out/ ; then
+            echo "::error::API key found in client bundle - refusing to deploy"
+            exit 1
+          fi
+          echo "No leaked keys in out/"
       # Pages' Jekyll step would skip _next/; the Actions deploy path doesn't
       # run Jekyll, but this costs nothing and removes the classic 404 mode.
       - run: touch out/.nojekyll
