@@ -6,7 +6,8 @@
     "build": "python3 tracer/build.py && NEXT_DIST=${NEXT_DIST:-.next-build} next build",
     "start": "next start",
     "trace": "python3 tracer/build.py",
-    "check": "python3 pipeline/check.py"
+    "check": "python3 pipeline/check.py",
+    "test": "python3 pipeline/test_solve.py"
   },
   "dependencies": {
     "next": "^15.5.4",

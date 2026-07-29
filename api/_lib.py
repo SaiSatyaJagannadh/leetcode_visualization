@@ -1,0 +1,437 @@
+"""Server-side plumbing for /api: the KV client, the /solve gate chain, redaction.
+
+Vercel does not route files whose basename starts with `_`, so the handlers can
+import this but nothing can call it over HTTP.
+
+The gate chain is the whole point of this module. No expensive operation may run
+before every cheap gate has passed, so `solve()` is one flat sequence that
+appends each gate it *enters* to an `audit` list. `pipeline/test_solve.py`
+asserts on that list, so a reordering bug fails the test even when every status
+code stays the same.
+
+Generation is STUBBED this pass: it returns the committed two-sum trace. The
+meter is built before the faucet on purpose — no OpenAI call exists yet.
+"""
+
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from http.cookies import SimpleCookie
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+# The real generator (next pass) traces candidate solutions with tracer/leetviz.py.
+# There is one tracer; the API must reach it rather than grow a second one.
+for _p in (str(ROOT / "tracer"), str(ROOT / "pipeline")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+IS_PROD = os.environ.get("VERCEL_ENV") == "production"
+FREE_PER_DAY = int(os.environ.get("SOLVE_FREE_PER_DAY", "5"))
+MONTHLY_CAP_USD = float(os.environ.get("SOLVE_MONTHLY_USD_CAP", "25"))
+# Placeholder unit cost so the meter, the cap and /admin/spend are exercisable
+# before a real API call exists. The real per-call cost replaces this.
+STUB_COST_USD = float(os.environ.get("SOLVE_STUB_COST_USD", "0.02"))
+DAY_TTL = 86_400
+CACHE_TTL = 30 * DAY_TTL
+
+# Status codes, one per gate. Documented here and in .env.example.
+#   400 malformed request (no prompt) — before any gate, nothing spent
+#   403 turnstile verification failed
+#   200 cache hit (body.cached == true) or fresh generation
+#   402 per-session/IP daily quota exhausted — body carries the BYO-key path
+#   503 global monthly spend cap reached, free tier off — BYO key still works
+#   502 generation failed
+#   401 admin endpoint, bad or missing shared secret
+
+
+# --------------------------------------------------------------------------- #
+# redaction
+# --------------------------------------------------------------------------- #
+
+_SK_RE = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+
+
+def redact(text, secret=None):
+    """Scrub anything key-shaped. `secret` scrubs a key that isn't `sk-` shaped."""
+    out = _SK_RE.sub("[redacted-key]", str(text))
+    if secret and len(str(secret)) >= 8:
+        out = out.replace(str(secret), "[redacted-key]")
+    return out
+
+
+def log(msg, secret=None):
+    """The only logger. Everything on the /api path goes through the redactor."""
+    print("[leetviz]", redact(msg, secret), file=sys.stderr, flush=True)
+
+
+# --------------------------------------------------------------------------- #
+# KV — one module, one seam. Swap the class, not the callers.
+# --------------------------------------------------------------------------- #
+
+
+class _KV:
+    """Vercel KV / Upstash Redis over its REST API. stdlib only."""
+
+    def __init__(self, url, token):
+        self.url = url.rstrip("/")
+        self.token = token
+
+    def _call(self, path, query="", body=None):
+        req = urllib.request.Request(
+            f"{self.url}/{path}{query}",
+            data=body,
+            headers={"Authorization": f"Bearer {self.token}"},
+            method="POST" if body is not None else "GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return json.load(r).get("result")
+        except (urllib.error.URLError, ValueError, TimeoutError) as e:
+            # A KV outage must not hand out free generations, but it also must
+            # not hard-fail a read. Reads return None; writes are best-effort.
+            log(f"KV error on {path.split('/')[0]}: {type(e).__name__}")
+            return None
+
+    @staticmethod
+    def _q(s):
+        return urllib.parse.quote(str(s), safe="")
+
+    def get(self, key):
+        return self._call(f"get/{self._q(key)}")
+
+    def set(self, key, value, ttl=None):
+        q = f"?EX={int(ttl)}" if ttl else ""
+        self._call(f"set/{self._q(key)}", q, str(value).encode())
+
+    def incr(self, key, by=1, ttl=None):
+        cmd = "incrbyfloat" if isinstance(by, float) else "incrby"
+        out = self._call(f"{cmd}/{self._q(key)}/{self._q(by)}")
+        if ttl:
+            self._call(f"expire/{self._q(key)}/{int(ttl)}/NX")
+        return num(out)
+
+
+class _FileKV:
+    """Offline fallback so the gates are testable without KV credentials.
+
+    Loud on construction and refused outright in production. Not a second
+    storage backend to maintain — it is a dev shim with the same four methods.
+    ponytail: read-modify-write with no lock; a real store is the upgrade path.
+    """
+
+    def __init__(self, path):
+        self.path = Path(path)
+        log(f"WARNING: no KV credentials — using file store at {self.path}. Dev only.")
+
+    def _load(self):
+        try:
+            return json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def _save(self, d):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(d))
+
+    def get(self, key):
+        row = self._load().get(key)
+        if not row or (row[1] and row[1] < time.time()):
+            return None
+        return row[0]
+
+    def set(self, key, value, ttl=None):
+        d = self._load()
+        d[key] = [str(value), time.time() + ttl if ttl else 0]
+        self._save(d)
+
+    def incr(self, key, by=1, ttl=None):
+        d = self._load()
+        row = d.get(key)
+        cur = num(row[0]) if row and (not row[1] or row[1] >= time.time()) else 0
+        exp = row[1] if row and row[1] else (time.time() + ttl if ttl else 0)
+        d[key] = [str(cur + by), exp]
+        self._save(d)
+        return cur + by
+
+
+def _make_store():
+    url, token = os.environ.get("KV_REST_API_URL"), os.environ.get("KV_REST_API_TOKEN")
+    if url and token:
+        return _KV(url, token)
+    if IS_PROD:
+        raise RuntimeError("KV_REST_API_URL/TOKEN are required in production")
+    return _FileKV(os.environ.get("KV_LOCAL_PATH", "/tmp/leetviz-kv.json"))
+
+
+store = _make_store()
+
+
+def num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+# --------------------------------------------------------------------------- #
+# keys and clocks
+# --------------------------------------------------------------------------- #
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+def day_key(now=None):
+    return (now or _now()).strftime("%Y-%m-%d")
+
+
+def month_key(now=None):
+    return (now or _now()).strftime("%Y-%m")
+
+
+def month_resets(now=None):
+    n = now or _now()
+    return (n.replace(day=28) + timedelta(days=4)).replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+
+
+def anon(s):
+    """IPs are hashed before they reach KV — the quota needs an identity, not a PII record."""
+    return hashlib.sha256(str(s).encode()).hexdigest()[:16]
+
+
+def prompt_hash(prompt):
+    """Normalize + hash. ponytail: the cheap-model canonicalisation is stubbed;
+    for now whitespace collapse + casefold, which already collapses the common
+    'two sum' / 'Two  Sum' duplicates. Swap the body, keep the signature."""
+    return hashlib.sha256(" ".join(prompt.split()).casefold().encode()).hexdigest()[:16]
+
+
+# --------------------------------------------------------------------------- #
+# gates
+# --------------------------------------------------------------------------- #
+
+
+def verify_turnstile(token, ip):
+    secret = os.environ.get("TURNSTILE_SECRET")
+    if not secret:
+        if IS_PROD:
+            log("TURNSTILE_SECRET missing in production — failing closed")
+            return False
+        log("WARNING: TURNSTILE_SECRET unset — captcha gate disabled. Dev only.")
+        return True
+    if not token:
+        return False
+    data = urllib.parse.urlencode(
+        {"secret": secret, "response": token, "remoteip": ip or ""}
+    ).encode()
+    try:
+        with urllib.request.urlopen(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify", data, timeout=5
+        ) as r:
+            return bool(json.load(r).get("success"))
+    except (urllib.error.URLError, ValueError, TimeoutError) as e:
+        log(f"turnstile verify failed: {type(e).__name__}")
+        return False
+
+
+FIXTURE = ROOT / "traces" / "two-sum.json"
+
+
+def generate(prompt, byo_key=None):
+    """STUB. Returns the committed two-sum trace and a placeholder cost.
+
+    The OpenAI call and the trace-it-with-tracer/leetviz.py step land in a later
+    pass. `byo_key` is accepted and deliberately never stored, never logged and
+    never echoed — it exists here only so the redaction path is real.
+    """
+    return json.loads(FIXTURE.read_text()), (0.0 if byo_key else STUB_COST_USD)
+
+
+def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
+    """The gate chain. Returns (status, body, audit).
+
+    `audit` names every gate entered, in order. It never reaches the client.
+    """
+    audit = []
+    m, d = month_key(), day_key()
+
+    prompt = (prompt or "").strip()
+    if not prompt:
+        return 400, {"error": "prompt required"}, audit
+
+    # 1. turnstile — cheapest possible rejection of a bot
+    audit.append("turnstile")
+    if not verify_turnstile(turnstile_token, ip):
+        return 403, {"error": "captcha verification failed"}, audit
+
+    # 2. normalize + hash
+    audit.append("hash")
+    h = prompt_hash(prompt)
+
+    # 3. cache — a hit costs nothing, so it must not touch quota or spend
+    audit.append("cache")
+    cached = store.get(f"cache:{h}")
+    if cached:
+        store.incr(f"stat:{m}:hit", 1)
+        return 200, {"hash": h, "cached": True, "trace": json.loads(cached)}, audit
+
+    # 4. per-session quota, counted against the cookie AND the IP
+    audit.append("quota")
+    qs, qi = f"quota:s:{session_id}:{d}", f"quota:i:{anon(ip)}:{d}"
+    if not byo_key:
+        used = max(num(store.get(qs)), num(store.get(qi)))
+        if used >= FREE_PER_DAY:
+            return (
+                402,
+                {
+                    "error": "daily free limit reached",
+                    "limit": FREE_PER_DAY,
+                    "resets": "24h after your first generation today",
+                    "byoKey": {
+                        "header": "x-byo-key",
+                        "how": "Add your own OpenAI key in the browser to keep going. "
+                        "It stays in localStorage, is sent per request and is never stored.",
+                    },
+                },
+                audit,
+            )
+
+    # 5. global monthly spend cap — the free tier switches off, BYO keeps working
+    audit.append("cap")
+    spent = num(store.get(f"spend:{m}"))
+    if not byo_key and spent >= MONTHLY_CAP_USD:
+        return (
+            503,
+            {
+                "error": "monthly budget cap reached",
+                "capUsd": MONTHLY_CAP_USD,
+                "spentUsd": round(spent, 4),
+                "resets": month_resets(),
+                "byoKey": {
+                    "header": "x-byo-key",
+                    "how": "Free generations are off until the cap resets. Your own "
+                    "OpenAI key still works and is never stored.",
+                },
+            },
+            audit,
+        )
+
+    # 6. generate — the first expensive thing in this function
+    audit.append("generate")
+    try:
+        trace, cost = generate(prompt, byo_key)
+    except Exception as e:  # noqa: BLE001 — the reason must not leak the key
+        log(f"generation failed: {type(e).__name__}: {e}", byo_key)
+        return 502, {"error": "generation failed"}, audit
+
+    # 7. record spend + decrement quota
+    # ponytail: check-then-increment, so N concurrent requests from one session
+    # can each pass gate 4. Upgrade path is an atomic INCR at the gate with a
+    # refund when a later gate rejects; not worth it at 5/day.
+    audit.append("record")
+    store.set(f"cache:{h}", json.dumps(trace), CACHE_TTL)
+    store.incr(f"stat:{m}:{'byo' if byo_key else 'gen'}", 1)
+    if not byo_key:
+        store.incr(qs, 1, DAY_TTL)
+        store.incr(qi, 1, DAY_TTL)
+        store.incr(f"spend:{m}", float(cost))
+        store.incr(f"spend:{d}", float(cost), 40 * DAY_TTL)
+    return 200, {"hash": h, "cached": False, "trace": trace}, audit
+
+
+def spend_report():
+    """Real counters, not estimates. Every number here is a KV read."""
+    m, d = month_key(), day_key()
+    month = num(store.get(f"spend:{m}"))
+    gen = num(store.get(f"stat:{m}:gen"))
+    hit = num(store.get(f"stat:{m}:hit"))
+    byo = num(store.get(f"stat:{m}:byo"))
+    served = hit + gen + byo
+    return {
+        "month": m,
+        "spendTodayUsd": round(num(store.get(f"spend:{d}")), 4),
+        "spendMonthUsd": round(month, 4),
+        "capUsd": MONTHLY_CAP_USD,
+        "headroomUsd": round(max(0.0, MONTHLY_CAP_USD - month), 4),
+        "capReached": month >= MONTHLY_CAP_USD,
+        "resets": month_resets(),
+        "generations": int(gen),
+        "byoGenerations": int(byo),
+        "cacheHits": int(hit),
+        # served = hits + generations; a request blocked by a gate never got served.
+        "cacheHitRate": round(hit / served, 4) if served else None,
+        "costPerGenerationUsd": round(month / gen, 6) if gen else None,
+        "freePerDay": FREE_PER_DAY,
+        "store": type(store).__name__,
+    }
+
+
+def admin_ok(header_value):
+    secret = os.environ.get("ADMIN_SECRET")
+    if not secret:
+        return False  # unset means closed, never open
+    return hmac.compare_digest(str(header_value or ""), secret)
+
+
+# --------------------------------------------------------------------------- #
+# HTTP shim — Vercel's Python runtime wants a BaseHTTPRequestHandler named
+# `handler`; the three endpoints share everything except their verb bodies.
+# --------------------------------------------------------------------------- #
+
+
+class JSONHandler(BaseHTTPRequestHandler):
+    SID = "lv_sid"
+
+    def log_message(self, fmt, *args):  # the default logger writes to stderr unredacted
+        log(fmt % args)
+
+    def reply(self, status, body, cookie=None):
+        raw = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        if cookie:
+            self.send_header(
+                "Set-Cookie",
+                f"{self.SID}={cookie}; Path=/; Max-Age={DAY_TTL}; SameSite=Lax; HttpOnly; Secure",
+            )
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def payload(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            return json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            return {}
+
+    def query(self, name):
+        q = urllib.parse.urlparse(self.path).query
+        return urllib.parse.parse_qs(q).get(name, [""])[0]
+
+    def client_ip(self):
+        fwd = self.headers.get("x-forwarded-for", "")
+        return fwd.split(",")[0].strip() or self.client_address[0]
+
+    def session(self):
+        """Returns (sid, set_cookie_or_None)."""
+        jar = SimpleCookie(self.headers.get("Cookie", ""))
+        sid = jar[self.SID].value if self.SID in jar else None
+        if sid and re.fullmatch(r"[0-9a-f]{32}", sid):
+            return sid, None
+        sid = secrets.token_hex(16)
+        return sid, sid
