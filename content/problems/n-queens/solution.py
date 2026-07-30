@@ -16,7 +16,7 @@ META = {
 VARIANTS = [
     {"id": "typical", "label": "n = 4", "input": {"n": 4}},
     {"id": "edge", "label": "n = 1", "input": {"n": 1}},
-    {"id": "worst-case", "label": "n = 5", "input": {"n": 5}},
+    {"id": "worst-case", "label": "n = 2, no solution", "input": {"n": 2}},
 ]
 
 

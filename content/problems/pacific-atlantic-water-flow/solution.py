@@ -13,10 +13,10 @@ META = {
     "unordered": True,
 }
 
-A = [[1, 2, 3], [8, 9, 4], [7, 6, 5]]
+A = [[1, 3, 2], [4, 9, 5]]
 
 VARIANTS = [
-    {"id": "typical", "label": "Spiral heights", "input": lambda: {"heights": [r[:] for r in A]}},
+    {"id": "typical", "label": "Ridge heights", "input": lambda: {"heights": [r[:] for r in A]}},
     {"id": "edge", "label": "Single cell", "input": lambda: {"heights": [[1]]}},
     {"id": "worst-case", "label": "All equal", "input": lambda: {"heights": [[5, 5], [5, 5]]}},
 ]

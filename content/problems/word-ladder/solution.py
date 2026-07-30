@@ -13,7 +13,7 @@ META = {
     "constraints": ["1 <= word length <= 10", "All words are the same length"],
 }
 
-WORDS = ["hot", "dot", "dog", "lot", "log", "cog"]
+WORDS = ["hot", "dot", "dog", "cog"]
 
 VARIANTS = [
     {"id": "typical", "label": "Chain exists", "input": {"begin": "hit", "end": "cog", "words": list(WORDS)}},

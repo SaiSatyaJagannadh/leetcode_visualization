@@ -15,7 +15,7 @@ META = {
 
 VARIANTS = [
     {"id": "typical", "label": "Typical", "input": {"piles": [3, 6, 7, 11], "h": 8}},
-    {"id": "edge", "label": "One hour per pile", "input": {"piles": [30, 11, 23, 4], "h": 4}},
+    {"id": "edge", "label": "One hour per pile", "input": {"piles": [11, 4], "h": 2}},
     {"id": "worst-case", "label": "Plenty of time", "input": {"piles": [3, 6, 7, 11], "h": 20}},
 ]
 

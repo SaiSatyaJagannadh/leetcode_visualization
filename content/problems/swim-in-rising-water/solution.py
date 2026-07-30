@@ -13,12 +13,12 @@ META = {
 }
 
 A = [[0, 2], [1, 3]]
-B = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
+B = [[0, 1, 2], [5, 4, 3]]
 
 VARIANTS = [
     {"id": "typical", "label": "2 x 2", "input": lambda: {"grid": [r[:] for r in A]}},
     {"id": "edge", "label": "Single cell", "input": lambda: {"grid": [[0]]}},
-    {"id": "worst-case", "label": "3 x 3", "input": lambda: {"grid": [r[:] for r in B]}},
+    {"id": "worst-case", "label": "2 x 3", "input": lambda: {"grid": [r[:] for r in B]}},
 ]
 
 BIG = 10 ** 9
