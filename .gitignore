@@ -434,6 +434,12 @@ out/
 .env
 .next-build/
 graphify-out/
+# A copy of a secrets file is still a secrets file, and `*.env` does not
+# match `.env.bak.<timestamp>`. Not `.env*` — that would swallow the
+# tracked .env.example, which carries variable names and no values.
+.env.bak*
+.env.local
+.env.*.local
 
 # Vercel
 .vercel
