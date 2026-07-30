@@ -41,6 +41,11 @@ SPLIT = "---8<--- context"
 
 MAX_OUTPUT_TOKENS = int(os.environ.get("SOLVE_MAX_OUTPUT_TOKENS", "16000"))
 MAX_REPAIRS = 2  # hard stop, per the model ladder
+# A congested NIM free tier answers in 125-180s, so the old hard-coded 180s read
+# timeout cut off legitimate replies. Budget math worth knowing: this must stay
+# under vercel.json maxDuration, and maxDuration must cover attempts x timeout,
+# so a slow provider and a full repair ladder cannot both fit in one request.
+CALL_TIMEOUT = int(os.environ.get("SOLVE_CALL_TIMEOUT", "260"))
 
 # Per-million-token prices. Unset means we cannot price a call, and an unpriced
 # call would make the monthly cap meaningless — so fall back to the flat
@@ -313,7 +318,7 @@ def _ssl_context():
 _SSL = _ssl_context()
 
 
-def _post(payload, key, url, timeout=180):
+def _post(payload, key, url, timeout=None):
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),
@@ -321,7 +326,7 @@ def _post(payload, key, url, timeout=180):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
+        with urllib.request.urlopen(req, timeout=timeout or CALL_TIMEOUT, context=_SSL) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
         # Both arrive as 429, and the difference is the whole story:
@@ -398,7 +403,12 @@ def call(role, msgs, key, art, byo=None, prov=OPENAI):
         f"{time.time() - started:.1f}s",
         byo,
     )
-    body = choice["message"]["content"]
+    body = (choice.get("message") or {}).get("content")
+    if body is None:
+        # Some NIM models answer with content: null and put everything in
+        # reasoning_content. json.loads(None) raises a TypeError that reads like
+        # a bug in the decoder, so name the real cause and let repair retry.
+        raise GenerationError(f"{prov.id}/{name} returned no content")
     if prov.strict:
         # Strict mode makes malformed JSON structurally impossible. There is
         # deliberately no parse-and-retry here: a fallback would hide a real bug.

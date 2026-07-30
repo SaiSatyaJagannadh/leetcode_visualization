@@ -50,6 +50,27 @@ Two keys carry structure a plain value cannot:
   path — there is no special op for it.
 - `$calls` — the recursion call tree, only when more than one call happened.
 
+Two rules about `$nodes` that traces fail on most often:
+
+1. **Every node lives in `$nodes`, keyed by id.** A variable that points at a
+   node holds `{"$ref": "<id>"}` and nothing else. Never write child fields as
+   nested keys on the variable: `["root", "left"]` is wrong, and
+   `["$nodes", "1", "left"]` is right. `root` itself is set once, to a `$ref`.
+2. **A parent must exist before any path through it is set**, and `$nodes` is
+   itself a parent. `["$nodes", "1"]` fails unless `["$nodes"]` was set first.
+   So build the structure with **one** `set` on `["$nodes"]` carrying the whole
+   map, then point the variable at its root:
+
+   ```json
+   ["set", ["$nodes"], {"1": {"val": 3, "left": {"$ref": "2"}, "right": null},
+                        "2": {"val": 9, "left": null, "right": null}}]
+   ["set", ["root"], {"$ref": "1"}]
+   ```
+
+   Never `["set", ["$nodes", "1"], …]` as the first mention of `$nodes`, and
+   never `["set", ["root", "left"], …]`. After `$nodes` exists, a deeper path
+   like `["$nodes", "1", "left"]` is fine — that is how a pointer is redirected.
+
 ## Encoding rules the schema forces
 
 The wire schema cannot express Python tuples or open-ended maps, so:

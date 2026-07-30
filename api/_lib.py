@@ -219,6 +219,12 @@ def anon(s):
     return hashlib.sha256(str(s).encode()).hexdigest()[:16]
 
 
+def local_hash(prompt):
+    """Whitespace-collapse + casefold, no model. Also the floor prompt_hash falls
+    back to, so a trace stored under a local hash is found by either path."""
+    return hashlib.sha256(" ".join(prompt.split()).casefold().encode()).hexdigest()[:16]
+
+
 def prompt_hash(prompt):
     """Normalize + hash. OPENAI_MODEL_CHEAP canonicalises 'find the two indices
     that sum to k' onto the same cache key as 'Two Sum'; whitespace collapse +
@@ -293,11 +299,20 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
 
     # 2. normalize + hash
     audit.append("hash")
-    h = prompt_hash(prompt)
+    # Byte-identical text can only land on the key it landed on last time, so
+    # look that up before paying the cheap model to tell us the same thing. On
+    # OpenAI nano the normalize call was ~1s; on a congested NIM free tier it is
+    # 100s+, which made an already-stored answer as slow as generating it. This
+    # short-circuits rather than reorders: a prompt that is NOT a byte-for-byte
+    # repeat still goes through normalize before the cache, so the semantic
+    # dedupe the ladder exists for is untouched.
+    fast = local_hash(prompt)
+    hit = store.get(f"cache:{fast}")
+    h = fast if hit else prompt_hash(prompt)
 
     # 3. cache — a hit costs nothing, so it must not touch quota or spend
     audit.append("cache")
-    cached = store.get(f"cache:{h}")
+    cached = hit or store.get(f"cache:{h}")
     if cached:
         store.incr(f"stat:{m}:hit", 1)
         return 200, {"hash": h, "cached": True, "trace": json.loads(cached)}, audit
@@ -366,7 +381,13 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
     # refund when a later gate rejects; not worth it at 5/day.
     audit.append("record")
     ver = prompt_version()
-    store.set(f"cache:{h}", json.dumps(trace), CACHE_TTL)
+    blob = json.dumps(trace)
+    store.set(f"cache:{h}", blob, CACHE_TTL)
+    # Also key it by the model-free hash of the exact text, so the fast path at
+    # gate 2 can find it. Without this, a byte-identical repeat misses the cheap
+    # lookup and pays the normalize call just to rediscover the same entry.
+    if (fast := local_hash(prompt)) != h:
+        store.set(f"cache:{fast}", blob, CACHE_TTL)
     store.set(f"promptver:{h}", ver, CACHE_TTL)  # trace a bad generation to its prompt
     store.incr(f"stat:{m}:{'byo' if byo_key else 'gen'}", 1)
     # Token counters are recorded for BYO too: they are usage, not spend.
