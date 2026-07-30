@@ -358,6 +358,26 @@ os.environ.update(OPENAI_API_KEY="sk-openai-test-key-000000", OPENAI_MODEL_GENER
 check("chain is openai then nvidia, never the reverse",
       [p.id for p in _gen.chain("GENERATE")] == ["openai", "nvidia"])
 
+# 13a. Three providers, ordered by SOLVE_PROVIDER_ORDER, unconfigured ones skipped.
+os.environ.update(GEMINI_API_KEY="AIzaTestKeyMustNeverBeLogged", GEMINI_MODEL_GENERATE="g-model")
+import importlib
+os.environ["SOLVE_PROVIDER_ORDER"] = "google,nvidia,openai"
+importlib.reload(_gen)
+check("SOLVE_PROVIDER_ORDER reorders the chain",
+      [p.id for p in _gen.chain("GENERATE")] == ["google", "nvidia", "openai"],
+      str([p.id for p in _gen.chain("GENERATE")]))
+os.environ.pop("GEMINI_MODEL_GENERATE")
+check("a provider with a key but no model name is skipped",
+      "google" not in [p.id for p in _gen.chain("GENERATE")])
+os.environ["SOLVE_PROVIDER_ORDER"] = "openai,google,nvidia"
+os.environ["GEMINI_MODEL_GENERATE"] = "g-model"
+importlib.reload(_gen)
+check("redact() scrubs an AIza key",
+      "AIza" not in _lib.redact("boom AIzaTestKeyMustNeverBeLogged boom"))
+for _k in ("GEMINI_API_KEY", "GEMINI_MODEL_GENERATE", "SOLVE_PROVIDER_ORDER"):
+    os.environ.pop(_k, None)
+importlib.reload(_gen)
+
 _HTTP = lambda code: urllib.error.HTTPError("u", code, "boom", {}, None)
 _GOOD = json.loads((ROOT / "traces" / "two-sum.json").read_text())
 

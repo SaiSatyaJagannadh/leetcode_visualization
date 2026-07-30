@@ -63,9 +63,10 @@ CACHE_TTL = 30 * DAY_TTL
 # redaction
 # --------------------------------------------------------------------------- #
 
-# Both vendor prefixes. A leaked nvapi- key is exactly as bad as a leaked sk-
-# one, and it would sail straight through a pattern that only knows about sk-.
-_SK_RE = re.compile(r"(?:sk|nvapi)-[A-Za-z0-9_-]{8,}")
+# Every vendor prefix in use: sk- (OpenAI), nvapi- (NVIDIA), AIza (Google).
+# A pattern that knows only one of them lets the others through, and a leaked
+# key is equally bad whoever issued it.
+_SK_RE = re.compile(r"(?:sk-|nvapi-|AIza)[A-Za-z0-9_-]{8,}")
 
 
 def redact(text, secret=None):
@@ -454,7 +455,7 @@ def spend_report():
         # only as "still working" while every trace quietly came from the fallback.
         "generationsByProvider": {
             p.id: int(num(store.get(f"prov:{m}:{p.id}")))
-            for p in (_gen.OPENAI, _gen.NVIDIA)
+            for p in _gen._ALL.values()
         },
         "providerChain": [p.id for p in _gen.chain("GENERATE")] or None,
         # --- provenance: which prompt and which models are live right now

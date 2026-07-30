@@ -100,12 +100,32 @@ OPENAI = Provider("openai", "https://api.openai.com/v1", "OPENAI_API_KEY", "OPEN
 NVIDIA = Provider(
     "nvidia", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "NVIDIA_MODEL", False
 )
+# Gemini's OpenAI-compatible endpoint. Keys are `AIza…`, also in the redactor.
+GOOGLE = Provider(
+    "google",
+    "https://generativelanguage.googleapis.com/v1beta/openai",
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    False,
+)
+
+_ALL = {p.id: p for p in (OPENAI, NVIDIA, GOOGLE)}
+# Order matters and the right order depends on which accounts are funded, so it
+# is configuration rather than a code edit. Measured round-trips on a trivial
+# schema request: gemini-2.5-flash 0.9s, NIM gpt-oss-20b 5-180s depending on
+# congestion. Put the fast, funded one early.
+ORDER = [
+    s.strip()
+    for s in (os.environ.get("SOLVE_PROVIDER_ORDER") or "openai,google,nvidia").split(",")
+    if s.strip() in _ALL
+]
 
 
 def chain(role):
-    """Providers to try for this role, in order. OpenAI first when configured;
-    NVIDIA only as a fallback, so a healthy OpenAI key never silently downgrades."""
-    return [p for p in (OPENAI, NVIDIA) if p.ready(role)]
+    """Providers to try for this role, in ORDER, skipping any that lack a key or
+    a model name. The first one is the primary; the rest are fallbacks, so a
+    healthy primary never silently downgrades."""
+    return [_ALL[i] for i in ORDER if _ALL[i].ready(role)]
 
 
 def _retryable(e):
@@ -510,7 +530,24 @@ def validate(problem):
                 tail = source[int(end)].strip()
                 m = _RETURNS.match(tail)
                 if not m:
-                    bad.append(f"{vid}: the last step is on {json.dumps(tail)}, not a return")
+                    # This message is fed verbatim into the repair turn, so it
+                    # says what to DO. Naming only the symptom made models
+                    # re-emit a different non-return last line, burning all
+                    # three attempts on the same mistake.
+                    rets = [
+                        i for i, ln in enumerate(source) if _RETURNS.match(ln.strip())
+                    ]
+                    where = (
+                        f" Append a final step with line {rets[-1]} "
+                        f"({json.dumps(source[rets[-1]].strip())})."
+                        if rets
+                        else " The source has no return line; add one."
+                    )
+                    bad.append(
+                        f"{vid}: the last step is on {json.dumps(tail)}, which is not a "
+                        f"return.{where} Every variant must end on the return that "
+                        f"produces its result."
+                    )
                 else:
                     expr = m.group(1).strip()
                     # Only a bare name can be checked without executing anything,

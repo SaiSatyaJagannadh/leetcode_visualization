@@ -43,7 +43,7 @@ jobs:
       # so the client bundle now lives in .next/static.
       - name: Scan client bundle for leaked keys
         run: |
-          if grep -rlE '(sk|nvapi)-[A-Za-z0-9_-]{16,}' .next/static/ ; then
+          if grep -rlE '(sk-|nvapi-|AIza)[A-Za-z0-9_-]{16,}' .next/static/ ; then
             echo "::error::API key found in client bundle - refusing to ship"
             exit 1
           fi
