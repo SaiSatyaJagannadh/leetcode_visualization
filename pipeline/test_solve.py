@@ -11,7 +11,19 @@ import io
 import os
 import sys
 import tempfile
+import urllib.error
 from pathlib import Path
+
+
+@contextlib.contextmanager
+def patched(mod, name, value):
+    """Swap a module attribute for the duration of a block, then put it back."""
+    old = getattr(mod, name)
+    setattr(mod, name, value)
+    try:
+        yield
+    finally:
+        setattr(mod, name, old)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,7 +41,8 @@ os.environ.pop("VERCEL_ENV", None)
 os.environ.pop("KV_REST_API_URL", None)
 os.environ.pop("KV_REST_API_TOKEN", None)
 # Hermetic: a developer's real key in the shell must not make the suite bill.
-for _k in ("OPENAI_API_KEY", "OPENAI_MODEL_CHEAP", "OPENAI_MODEL_GENERATE", "OPENAI_MODEL_REPAIR"):
+for _k in ("OPENAI_API_KEY", "OPENAI_MODEL_CHEAP", "OPENAI_MODEL_GENERATE", "OPENAI_MODEL_REPAIR",
+           "NVIDIA_API_KEY", "NVIDIA_MODEL_CHEAP", "NVIDIA_MODEL_GENERATE", "NVIDIA_MODEL_REPAIR"):
     os.environ.pop(_k, None)
 
 sys.path.insert(0, str(ROOT / "api"))
@@ -280,7 +293,7 @@ bad_wire = _gen.encode(_broken, ART)
 check("the repair fixture really is invalid", _gen.validate(_broken) != [])
 
 
-def fake_call(role, msgs, key, art, byo=None):
+def fake_call(role, msgs, key, art, byo=None, prov=None):
     calls.append((role, len(msgs)))
     return bad_wire, {"prompt": 10, "cached": 0, "out_total": 5, "out_visible": 5, "reasoning": 0}
 
@@ -337,6 +350,78 @@ for field in ("outputTokensMonthBilled", "outputTokensMonthVisible", "reasoningT
               "cachedPromptTokensMonth", "promptVersion", "normalizeSpendMonthUsd"):
     check(f"/admin/spend reports {field}", field in rep, str(sorted(rep)))
 
+
+# 13. Provider failover: OpenAI first, NVIDIA only when OpenAI won't serve.
+os.environ.update(OPENAI_API_KEY="sk-openai-test-key-000000", OPENAI_MODEL_GENERATE="oai-model",
+                  NVIDIA_API_KEY="nvapi-test-key-00000000000", NVIDIA_MODEL_GENERATE="nv-model")
+
+check("chain is openai then nvidia, never the reverse",
+      [p.id for p in _gen.chain("GENERATE")] == ["openai", "nvidia"])
+
+_HTTP = lambda code: urllib.error.HTTPError("u", code, "boom", {}, None)
+_GOOD = json.loads((ROOT / "traces" / "two-sum.json").read_text())
+
+def _fake(fail_on, record):
+    """Stand in for _gen.call: fails for one provider, succeeds for the other."""
+    def call(role, msgs, key, art, byo=None, prov=_gen.OPENAI):
+        record.append(prov.id)
+        if prov.id == fail_on:
+            raise fail_on_error[0]
+        return _gen.encode(_GOOD), {"prompt": 1, "cached": 0, "out_total": 1,
+                                    "out_visible": 1, "reasoning": 0, "calls": 1}
+    return call
+
+fail_on_error = [_HTTP(429)]
+seen = []
+with patched(_gen, "call", _fake("openai", seen)):
+    prob, _, _ = _gen.generate("reverse a linked list")
+check("429 on openai fails over to nvidia", seen == ["openai", "nvidia"], str(seen))
+check("the failover still returns a valid trace", prob["schemaVersion"] == 1)
+
+fail_on_error = [_HTTP(400)]
+seen = []
+try:
+    with patched(_gen, "call", _fake("openai", seen)):
+        _gen.generate("reverse a linked list")
+    raised = False
+except urllib.error.HTTPError:
+    raised = True
+check("400 surfaces instead of failing over (it is our bug)", raised and seen == ["openai"], str(seen))
+
+fail_on_error = [_gen.GenerationError("will not replay")]
+seen = []
+try:
+    with patched(_gen, "call", _fake("openai", seen)):
+        _gen.generate("reverse a linked list")
+except _gen.GenerationError:
+    pass
+check("a semantic failure does not fail over to a weaker model", seen == ["openai"], str(seen))
+
+fail_on_error = [_HTTP(429)]
+seen = []
+try:
+    with patched(_gen, "call", _fake("openai", seen)):
+        _gen.generate("reverse a linked list", byo_key=BYO_KEY)
+except urllib.error.HTTPError:
+    pass
+check("a BYO key never fails over to our NVIDIA credit", seen == ["openai"], str(seen))
+
+# 13b. nvapi- keys must redact exactly like sk- ones.
+check("redact() scrubs an nvapi- key",
+      "nvapi-" not in _lib.redact("boom nvapi-abcdefgh12345678 boom"),
+      _lib.redact("boom nvapi-abcdefgh12345678 boom"))
+check("redact() still scrubs an sk- key",
+      "sk-" not in _lib.redact(f"boom {BYO_KEY} boom"))
+
+rep = _lib.spend_report()
+check("/admin/spend reports generationsByProvider", "generationsByProvider" in rep)
+check("/admin/spend reports the live provider chain",
+      rep.get("providerChain") == ["openai", "nvidia"], str(rep.get("providerChain")))
+
+for _k in ("NVIDIA_API_KEY", "NVIDIA_MODEL_GENERATE", "OPENAI_API_KEY", "OPENAI_MODEL_GENERATE"):
+    os.environ.pop(_k, None)
+
 reset()
+
 print(f"\n{len(FAILS)} failures")
 sys.exit(1 if FAILS else 0)

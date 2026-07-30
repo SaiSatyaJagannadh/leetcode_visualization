@@ -39,7 +39,6 @@ SCHEMA_FILE = ROOT / "prompts" / "solve-schema.json"
 EXEMPLAR = ROOT / "traces" / "two-sum.json"
 SPLIT = "---8<--- context"
 
-API_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1") + "/chat/completions"
 MAX_OUTPUT_TOKENS = int(os.environ.get("SOLVE_MAX_OUTPUT_TOKENS", "16000"))
 MAX_REPAIRS = 2  # hard stop, per the model ladder
 
@@ -55,9 +54,72 @@ class GenerationError(Exception):
     """Semantic failure the repair ladder could not fix. The reason never leaks a key."""
 
 
+# --------------------------------------------------------------------------- #
+# providers — OpenAI first, NVIDIA as the fallback when OpenAI won't serve
+# --------------------------------------------------------------------------- #
+
+
+class Provider:
+    """An OpenAI-shaped chat-completions endpoint.
+
+    NVIDIA NIM speaks the same wire protocol, so the transport is shared. What
+    is NOT shared is `strict: true` — that is an OpenAI feature. On a provider
+    without it the model is merely *asked* for schema-shaped JSON, so malformed
+    JSON becomes possible again and has to be handled rather than assumed away.
+    """
+
+    __slots__ = ("id", "url", "env_key", "env_model", "strict")
+
+    def __init__(self, pid, default_url, env_key, env_model, strict):
+        self.id = pid
+        self.url = (os.environ.get(f"{pid.upper()}_BASE_URL") or default_url) + "/chat/completions"
+        self.env_key = env_key
+        self.env_model = env_model
+        self.strict = strict
+
+    @property
+    def key(self):
+        return os.environ.get(self.env_key) or ""
+
+    def model(self, role):
+        """Every model name comes from the environment. There are no literals here."""
+        return os.environ.get(f"{self.env_model}_{role}") or ""
+
+    def ready(self, role):
+        return bool(self.key and self.model(role))
+
+
+OPENAI = Provider("openai", "https://api.openai.com/v1", "OPENAI_API_KEY", "OPENAI_MODEL", True)
+# NVIDIA NIM's OpenAI-compatible endpoint. Keys are `nvapi-…`, which is why the
+# redactor in _lib matches that prefix too — a leak here is as bad as an sk- one.
+NVIDIA = Provider(
+    "nvidia", "https://integrate.api.nvidia.com/v1", "NVIDIA_API_KEY", "NVIDIA_MODEL", False
+)
+
+
+def chain(role):
+    """Providers to try for this role, in order. OpenAI first when configured;
+    NVIDIA only as a fallback, so a healthy OpenAI key never silently downgrades."""
+    return [p for p in (OPENAI, NVIDIA) if p.ready(role)]
+
+
+def _retryable(e):
+    """Worth trying the next provider: rate limits and upstream faults only.
+
+    HTTPError subclasses URLError, so it must be tested first — otherwise a 400
+    (our malformed request) would fail over and get misreported as an outage.
+    A semantic GenerationError is never retryable either: if a trace will not
+    replay, a weaker model is not the fix and would just double the bill.
+    """
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code in (429, 500, 502, 503, 504)
+    return isinstance(e, (urllib.error.URLError, TimeoutError))
+
+
 def model(role):
-    """Every model name comes from the environment. There are no literals here."""
-    return os.environ.get(f"OPENAI_MODEL_{role}") or ""
+    """Back-compat shim: the first configured provider's name for this role."""
+    c = chain(role)
+    return c[0].model(role) if c else ""
 
 
 # --------------------------------------------------------------------------- #
@@ -251,9 +313,9 @@ def _ssl_context():
 _SSL = _ssl_context()
 
 
-def _post(payload, key, timeout=180):
+def _post(payload, key, url, timeout=180):
     req = urllib.request.Request(
-        API_URL,
+        url,
         data=json.dumps(payload).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
@@ -292,20 +354,26 @@ def _add(into, u):
     into["calls"] = into.get("calls", 0) + 1
 
 
-def call(role, msgs, key, art, byo=None):
+def call(role, msgs, key, art, byo=None, prov=OPENAI):
     """One structured-output call. Returns (wire dict, usage)."""
-    name = model(role)
+    name = prov.model(role)
     if not name:
-        raise GenerationError(f"OPENAI_MODEL_{role} is not configured")
+        raise GenerationError(f"{prov.env_model}_{role} is not configured")
     started = time.time()
+    schema = {"type": "json_schema", "json_schema": _strip_x(art)}
+    if not prov.strict:
+        # NIM honours json_schema on many models but does not guarantee strict,
+        # so the schema is a request here, not a contract. Handled below.
+        schema["json_schema"] = {**schema["json_schema"], "strict": False}
     raw = _post(
         {
             "model": name,
             "messages": msgs,
             "max_completion_tokens": MAX_OUTPUT_TOKENS,
-            "response_format": {"type": "json_schema", "json_schema": _strip_x(art)},
+            "response_format": schema,
         },
         key,
+        prov.url,
     )
     choice = (raw.get("choices") or [{}])[0]
     if choice.get("finish_reason") == "length":
@@ -314,14 +382,24 @@ def call(role, msgs, key, art, byo=None):
         raise GenerationError("model refused the request")
     u = _usage(raw)
     log(
-        f"{role} model={name} prompt={u['prompt']} cached_tokens={u['cached']} "
-        f"out_total={u['out_total']} out_visible={u['out_visible']} "
-        f"reasoning={u['reasoning']} {time.time() - started:.1f}s",
+        f"{role} provider={prov.id} model={name} prompt={u['prompt']} "
+        f"cached_tokens={u['cached']} out_total={u['out_total']} "
+        f"out_visible={u['out_visible']} reasoning={u['reasoning']} "
+        f"{time.time() - started:.1f}s",
         byo,
     )
-    # Strict mode makes malformed JSON structurally impossible. There is
-    # deliberately no parse-and-retry here: a fallback would hide a real bug.
-    return json.loads(choice["message"]["content"]), u
+    body = choice["message"]["content"]
+    if prov.strict:
+        # Strict mode makes malformed JSON structurally impossible. There is
+        # deliberately no parse-and-retry here: a fallback would hide a real bug.
+        return json.loads(body), u
+    # Without strict, bad JSON is a normal outcome rather than a defect. Raise so
+    # the existing repair ladder re-prompts, instead of silently retrying here —
+    # that keeps one recovery mechanism, not two.
+    try:
+        return json.loads(body), u
+    except ValueError as e:
+        raise GenerationError(f"{prov.id} returned unparseable JSON: {e}") from e
 
 
 # --------------------------------------------------------------------------- #
@@ -454,26 +532,54 @@ def generate(prompt, byo_key=None):
     Repair is capped at MAX_REPAIRS. The repair turns are appended *after* the
     user's problem, so the static prefix — and its cache hit — survives them.
     """
-    key = byo_key or os.environ.get("OPENAI_API_KEY")
     total = {}
-    if not key or not model("GENERATE"):
+    # A bring-your-own key is an OpenAI key by contract, so it pins the provider.
+    # Failing a BYO request over to NVIDIA would spend our credit on their behalf.
+    provs = [OPENAI] if byo_key else chain("GENERATE")
+    if not provs or (byo_key and not OPENAI.model("GENERATE")):
         return _offline(), (0.0 if byo_key else _lib.STUB_COST_USD), total
 
     art = artifact()
     msgs = messages(prompt, art)
+    for i, prov in enumerate(provs):
+        key = byo_key if byo_key else prov.key
+        try:
+            problem, cost = _ladder(prov, key, msgs, art, byo_key, total)
+            # Which vendor actually served this month, so a silent, permanent
+            # failover shows up on the dashboard instead of only in the logs.
+            _lib.store.incr(f"prov:{_lib.month_key()}:{prov.id}")
+            return problem, (0.0 if byo_key else cost), total
+        except Exception as e:  # noqa: BLE001 — re-raised unless a fallback exists
+            if not (i + 1 < len(provs) and _retryable(e)):
+                raise
+            log(
+                f"{prov.id} unavailable ({type(e).__name__}"
+                f"{getattr(e, 'code', '') and ' ' + str(e.code)}), "
+                f"failing over to {provs[i + 1].id}",
+                byo_key,
+            )
+    raise GenerationError("no provider produced a trace")  # pragma: no cover
+
+
+def _ladder(prov, key, msgs, art, byo_key, total):
+    """The repair ladder against one provider. Returns (problem, cost_usd).
+
+    Tokens accumulate into `total` even on a failed attempt, because they were
+    billed — a failover must not hide what the first provider already cost.
+    """
     role, cost = "GENERATE", 0.0
     for attempt in range(MAX_REPAIRS + 1):
-        wire, u = call(role, msgs, key, art, byo_key)
+        wire, u = call(role, msgs, key, art, byo_key, prov)
         _add(total, u)
         cost += _cost(u)  # a repair round costs real money; it is billed, not free
         problem = decode(wire, art)
         bad = validate(problem)
         if not bad:
-            return problem, (0.0 if byo_key else cost), total
+            return problem, cost
         log(f"validation failed (attempt {attempt + 1}/{MAX_REPAIRS + 1}): {'; '.join(bad[:4])}", byo_key)
         if attempt == MAX_REPAIRS:
             break
-        role = "REPAIR"
+        role = "REPAIR" if prov.model("REPAIR") else "GENERATE"
         msgs = msgs + [
             {"role": "assistant", "content": json.dumps(wire, separators=(",", ":"))},
             {
@@ -512,27 +618,34 @@ def canonical(prompt):
     Falls open on purpose: a normalisation outage must degrade to a colder cache,
     never to a 502. Its tokens are counted separately — see spend_report.
     """
-    key, name = os.environ.get("OPENAI_API_KEY"), model("CHEAP")
-    if not (key and name):
-        return None
-    try:
-        raw = _post(
-            {
-                "model": name,
-                "messages": [
-                    {"role": "system", "content": _NORM_SYSTEM},
-                    {"role": "user", "content": prompt[:4000]},
-                ],
-                "max_completion_tokens": 200,
-                "response_format": {"type": "json_schema", "json_schema": _NORM_SCHEMA},
-            },
-            key,
-            timeout=20,
-        )
-        u = _usage(raw)
-        _lib.store.incr(f"norm:{_lib.month_key()}:usd", float(_cost(u)))
-        log(f"CHEAP model={name} prompt={u['prompt']} cached_tokens={u['cached']} out_total={u['out_total']}")
-        return json.loads(raw["choices"][0]["message"]["content"])["canonical"]
-    except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as e:
-        log(f"normalize failed, falling back to local canonicalisation: {type(e).__name__}")
-        return None
+    for prov in chain("CHEAP"):
+        name = prov.model("CHEAP")
+        schema = {"type": "json_schema", "json_schema": _NORM_SCHEMA}
+        if not prov.strict:
+            schema["json_schema"] = {**_NORM_SCHEMA, "strict": False}
+        try:
+            raw = _post(
+                {
+                    "model": name,
+                    "messages": [
+                        {"role": "system", "content": _NORM_SYSTEM},
+                        {"role": "user", "content": prompt[:4000]},
+                    ],
+                    "max_completion_tokens": 200,
+                    "response_format": schema,
+                },
+                prov.key,
+                prov.url,
+                timeout=20,
+            )
+            u = _usage(raw)
+            _lib.store.incr(f"norm:{_lib.month_key()}:usd", float(_cost(u)))
+            log(
+                f"CHEAP provider={prov.id} model={name} prompt={u['prompt']} "
+                f"cached_tokens={u['cached']} out_total={u['out_total']}"
+            )
+            return json.loads(raw["choices"][0]["message"]["content"])["canonical"]
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as e:
+            log(f"normalize via {prov.id} failed: {type(e).__name__}")
+    # Every provider missing or failing means a colder cache, never a 502.
+    return None

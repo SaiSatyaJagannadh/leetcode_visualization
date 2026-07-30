@@ -63,7 +63,9 @@ CACHE_TTL = 30 * DAY_TTL
 # redaction
 # --------------------------------------------------------------------------- #
 
-_SK_RE = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+# Both vendor prefixes. A leaked nvapi- key is exactly as bad as a leaked sk-
+# one, and it would sail straight through a pattern that only knows about sk-.
+_SK_RE = re.compile(r"(?:sk|nvapi)-[A-Za-z0-9_-]{8,}")
 
 
 def redact(text, secret=None):
@@ -423,6 +425,13 @@ def spend_report():
         "reasoningTokensMonth": int(tok["reasoning"]),
         "modelCallsMonth": int(tok["calls"]),
         "callsPerGeneration": round(tok["calls"] / (gen + byo), 3) if (gen + byo) else None,
+        # --- which vendor served. A permanent OpenAI outage would otherwise show
+        # only as "still working" while every trace quietly came from the fallback.
+        "generationsByProvider": {
+            p.id: int(num(store.get(f"prov:{m}:{p.id}")))
+            for p in (_gen.OPENAI, _gen.NVIDIA)
+        },
+        "providerChain": [p.id for p in _gen.chain("GENERATE")] or None,
         # --- provenance: which prompt and which models are live right now
         "promptVersion": _gen.prompt_version(),
         "modelCheap": _gen.model("CHEAP") or "(unset — local canonicalisation)",
