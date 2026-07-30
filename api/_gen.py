@@ -46,6 +46,11 @@ MAX_REPAIRS = 2  # hard stop, per the model ladder
 # under vercel.json maxDuration, and maxDuration must cover attempts x timeout,
 # so a slow provider and a full repair ladder cannot both fit in one request.
 CALL_TIMEOUT = int(os.environ.get("SOLVE_CALL_TIMEOUT", "260"))
+# Total wall clock the repair ladder may spend. Keep it under vercel.json
+# maxDuration or the platform kills the request instead. Note Vercel Hobby caps
+# functions at 60s, so a provider that needs 40s+ per call cannot serve /solve
+# there at all — that needs a faster model or an async job, not a bigger number.
+BUDGET = int(os.environ.get("SOLVE_TIME_BUDGET", "240"))
 
 # Per-million-token prices. Unset means we cannot price a call, and an unpriced
 # call would make the monthly cap meaningless — so fall back to the flat
@@ -480,6 +485,36 @@ def validate(problem):
     bad = []
     if not problem.get("approaches"):
         bad.append("approaches is empty; at least one approach is required")
+    # Content checks. The prompt asks for these and models skip them anyway, so
+    # they are enforced here — the same lesson as the return-line rule. Messages
+    # are fed verbatim into the repair turn, so they say what to add.
+    #
+    # Measured against the 150 authored traces before enforcing: 150/150 already
+    # have >=2 examples, non-empty constraints and a non-empty prompt, so those
+    # three checks only hold generated content to the existing house standard.
+    # The two-approach rule is deliberately STRICTER than the corpus — 108 of the
+    # 150 authored problems ship a single approach. That is content debt in the
+    # corpus, not a reason to let new traces be thin; a generated trace with no
+    # brute force cannot show why the clever version wins, which is the point.
+    n_appr = len(problem.get("approaches") or [])
+    if n_appr == 1:
+        got = (problem["approaches"][0].get("label") or problem["approaches"][0].get("id") or "it")
+        bad.append(
+            f"only one approach ({got}); add a second so the reader can compare. "
+            "Put the obvious brute force first and the idiomatic solution second, "
+            "both returning the same result for each variant id. If there is no "
+            "slower version, give two honestly different strategies instead."
+        )
+    n_ex = len(problem.get("examples") or [])
+    if n_ex < 2:
+        bad.append(
+            f"only {n_ex} worked example(s); add at least one more that shows an "
+            "edge the reader would get wrong — a tie, an empty input, a duplicate."
+        )
+    if not (problem.get("constraints") or []):
+        bad.append("constraints is empty; state the input bounds in your own words")
+    if not (problem.get("prompt") or "").strip():
+        bad.append("prompt is empty; restate the problem in your own words")
     for a in problem.get("approaches") or []:
         where = a.get("id") or "?"
         source = a.get("source") or []
@@ -625,8 +660,23 @@ def _ladder(prov, key, msgs, art, byo_key, total):
     billed — a failover must not hide what the first provider already cost.
     """
     role, cost = "GENERATE", 0.0
+    # MAX_REPAIRS is the attempt ceiling; wall clock is the real limit. A slow
+    # provider can spend 200s on one attempt, and three of those fit in no
+    # serverless request — so refuse to *start* an attempt that cannot finish,
+    # rather than having it killed mid-flight and losing the work already done.
+    deadline = time.time() + BUDGET
+    took = 0.0
     for attempt in range(MAX_REPAIRS + 1):
+        if attempt and time.time() + took > deadline:
+            log(
+                f"time budget spent after {attempt} attempt(s); "
+                f"last took {took:.0f}s, not starting another",
+                byo_key,
+            )
+            break
+        t0 = time.time()
         wire, u = call(role, msgs, key, art, byo_key, prov)
+        took = time.time() - t0
         _add(total, u)
         cost += _cost(u)  # a repair round costs real money; it is billed, not free
         problem = decode(wire, art)
@@ -641,8 +691,20 @@ def _ladder(prov, key, msgs, art, byo_key, total):
             {"role": "assistant", "content": json.dumps(wire, separators=(",", ":"))},
             {
                 "role": "user",
-                "content": "That trace does not replay. Fix exactly these problems and "
-                "return the whole trace again:\n- " + "\n- ".join(bad[:20]),
+                # Without the "keep everything else" clause the model regressed a
+                # previous fix while making the next one — it added the second
+                # approach, then dropped it again on the following turn. The
+                # repair budget is 2, so one thrash cycle burns the whole thing.
+                "content": (
+                    "That trace does not replay. Return the WHOLE trace again with "
+                    "exactly these problems fixed:\n- "
+                    + "\n- ".join(bad[:20])
+                    + "\n\nKeep everything that already worked. Do not remove or "
+                    "rename any approach, variant, example or constraint you have "
+                    "already written, and do not reduce their counts: at least two "
+                    "approaches, three variants each, and two examples. Fixing one "
+                    "problem by breaking another is not progress."
+                ),
             },
         ]
     raise GenerationError(f"trace still does not replay after {MAX_REPAIRS} repair attempts")

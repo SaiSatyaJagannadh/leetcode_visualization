@@ -87,9 +87,19 @@ The wire schema cannot express Python tuples or open-ended maps, so:
 
 Aim for 15–60 steps per variant and never exceed 400: a trace past that stops
 being watchable. Choose inputs small enough to be honest at that length (a
-4-element array, a 7-node tree). Prefer two approaches — a brute force and the
-idiomatic one — over one; both must return the same `result` for the same
-variant id.
+4-element array, a 7-node tree).
+
+**Two approaches are required, not preferred.** Give the obvious brute force
+first, then the idiomatic solution, and make both return the same `result` for
+the same variant id. The whole point of this site is seeing why the clever
+version is better, and one approach cannot show that. Put the brute force first
+so it is the default tab. If a problem genuinely has no slower version, give two
+honestly different strategies instead (iterative vs recursive, sorting vs
+counting) — never a single approach.
+
+**Two or three `examples` are required.** One worked example does not show the
+edge the reader will get wrong, so include the tie, the empty case or the
+duplicate alongside the ordinary one.
 
 `prompt`, `examples` and `constraints` are your own wording. Never reproduce a
 problem statement you have seen verbatim; restate it.
