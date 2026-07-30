@@ -18,5 +18,5 @@ export default {
   // A generation runs ~40s. The dev proxy defaults to 30s and returns a 500
   // while Python is still working, which reads as "generation is broken" when
   // it actually succeeded and cached.
-  experimental: { proxyTimeout: 300_000 },
+  experimental: { proxyTimeout: 600_000 },
 };

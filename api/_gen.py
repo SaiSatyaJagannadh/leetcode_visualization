@@ -45,12 +45,12 @@ MAX_REPAIRS = 2  # hard stop, per the model ladder
 # timeout cut off legitimate replies. Budget math worth knowing: this must stay
 # under vercel.json maxDuration, and maxDuration must cover attempts x timeout,
 # so a slow provider and a full repair ladder cannot both fit in one request.
-CALL_TIMEOUT = int(os.environ.get("SOLVE_CALL_TIMEOUT", "260"))
+CALL_TIMEOUT = int(os.environ.get("SOLVE_CALL_TIMEOUT", "420"))
 # Total wall clock the repair ladder may spend. Keep it under vercel.json
 # maxDuration or the platform kills the request instead. Note Vercel Hobby caps
 # functions at 60s, so a provider that needs 40s+ per call cannot serve /solve
 # there at all — that needs a faster model or an async job, not a bigger number.
-BUDGET = int(os.environ.get("SOLVE_TIME_BUDGET", "240"))
+BUDGET = int(os.environ.get("SOLVE_TIME_BUDGET", "400"))
 
 # Per-million-token prices. Unset means we cannot price a call, and an unpriced
 # call would make the monthly cap meaningless — so fall back to the flat
@@ -58,6 +58,13 @@ BUDGET = int(os.environ.get("SOLVE_TIME_BUDGET", "240"))
 PRICE_IN = float(os.environ.get("SOLVE_PRICE_IN_PER_MTOK", "0"))
 PRICE_CACHED_IN = float(os.environ.get("SOLVE_PRICE_CACHED_IN_PER_MTOK", "0"))
 PRICE_OUT = float(os.environ.get("SOLVE_PRICE_OUT_PER_MTOK", "0"))
+
+
+# Marks a complaint as "thin content" rather than "structurally broken". A thin
+# trace still replays correctly in the player, so shipping it beats returning a
+# 502 — enforcing two approaches as a hard failure turned a useful result into no
+# result at all on heavy problems. Structural faults are never soft.
+THIN = "[thin] "
 
 
 class GenerationError(Exception):
@@ -475,6 +482,82 @@ def _has_ref(v):
     return '"$ref"' in json.dumps(v)
 
 
+def land_on_return(problem):
+    """Append a final no-op step on the return line where a variant stops short.
+
+    Not a fabrication and not a way to dodge validation. The player highlights
+    `step.line`; a variant whose last step sits on the assignment *before* the
+    return has correct state but never shows the return being reached. That step
+    carries no ops, so it changes no state — and the result-equality check below
+    still runs against that unchanged state, so a genuinely wrong trace still
+    fails. Doing it here saves a repair round that costs 240s on a slow provider
+    for something derivable from the source listing.
+    """
+    fixed = 0
+    for a in problem.get("approaches") or []:
+        source = a.get("source") or []
+        rets = [i for i, ln in enumerate(source) if _RETURNS.match(ln.strip())]
+        if not rets:
+            continue
+        for v in a.get("variants") or []:
+            steps = v.get("steps") or []
+            if not steps:
+                continue
+            end = steps[-1].get("line")
+            if isinstance(end, (int, float)) and int(end) in rets:
+                continue  # already lands on a return
+            # The last return at or after where it stopped, else the final one.
+            after = [i for i in rets if isinstance(end, (int, float)) and i >= int(end)]
+            steps.append({"line": (after[0] if after else rets[-1]), "note": None, "ops": []})
+            fixed += 1
+    if fixed:
+        log(f"landed {fixed} variant(s) on their return line without a repair round")
+    return problem
+
+
+_SEED_NUMS = None
+_SEED_BY_NUM = {}
+
+
+def fix_leetcode_number(problem):
+    """Correct a hallucinated LeetCode number against pipeline/seed.py.
+
+    The model guessed 1 for Move Zeroes, which would have pointed the outbound
+    "LeetCode" link at Two Sum. seed.py holds 150 authoritative (title, number)
+    pairs, so when the generated title matches one, the seed wins. A title we do
+    not know stays unverified — a possibly-right number is more useful than none,
+    and this only overrides where we can prove the model wrong.
+    """
+    global _SEED_NUMS
+    if _SEED_NUMS is None:
+        try:
+            import seed  # pipeline/ is on sys.path via _lib
+
+            _SEED_NUMS = {t.casefold(): n for _, t, _, _, n, _, _, _ in seed.rows()}
+            _SEED_BY_NUM.update({n: t.casefold() for _, t, _, _, n, _, _, _ in seed.rows()})
+        except Exception:  # noqa: BLE001 — a missing seed must not fail generation
+            _SEED_NUMS = {}
+    title = (problem.get("title") or "").strip().casefold()
+    got = problem.get("leetcode")
+    want = _SEED_NUMS.get(title)
+    if want and got != want:
+        log(f"corrected leetcode number for {title!r}: {got} -> {want}")
+        problem["leetcode"] = want
+        return problem
+    # Reverse check, for the many problems outside the 150-problem seed. If the
+    # number belongs to a DIFFERENT problem we do know, it is provably wrong —
+    # Move Zeroes came back as 1, which is Two Sum, and would have linked there.
+    # Drop it: the page renders without a LeetCode chip, which beats a link that
+    # confidently sends the reader to the wrong problem.
+    if not want and got and _SEED_BY_NUM.get(got, title) != title:
+        log(f"dropped leetcode {got} from {title!r}: that number is {_SEED_BY_NUM[got]!r}")
+        # Pop, never set to None: the field is `z.number().optional()`, which
+        # accepts an absent key but rejects a JSON null, so assigning None here
+        # would fail zod in the browser instead of just hiding the chip.
+        problem.pop("leetcode", None)
+    return problem
+
+
 def validate(problem):
     """Replay every variant the way the player will and report what breaks.
 
@@ -500,7 +583,7 @@ def validate(problem):
     if n_appr == 1:
         got = (problem["approaches"][0].get("label") or problem["approaches"][0].get("id") or "it")
         bad.append(
-            f"only one approach ({got}); add a second so the reader can compare. "
+            f"{THIN}only one approach ({got}); add a second so the reader can compare. "
             "Put the obvious brute force first and the idiomatic solution second, "
             "both returning the same result for each variant id. If there is no "
             "slower version, give two honestly different strategies instead."
@@ -508,7 +591,7 @@ def validate(problem):
     n_ex = len(problem.get("examples") or [])
     if n_ex < 2:
         bad.append(
-            f"only {n_ex} worked example(s); add at least one more that shows an "
+            f"{THIN}only {n_ex} worked example(s); add at least one more that shows an "
             "edge the reader would get wrong — a tie, an empty input, a duplicate."
         )
     if not (problem.get("constraints") or []):
@@ -666,6 +749,7 @@ def _ladder(prov, key, msgs, art, byo_key, total):
     # rather than having it killed mid-flight and losing the work already done.
     deadline = time.time() + BUDGET
     took = 0.0
+    thin_best = None
     for attempt in range(MAX_REPAIRS + 1):
         if attempt and time.time() + took > deadline:
             log(
@@ -675,14 +759,30 @@ def _ladder(prov, key, msgs, art, byo_key, total):
             )
             break
         t0 = time.time()
-        wire, u = call(role, msgs, key, art, byo_key, prov)
+        try:
+            wire, u = call(role, msgs, key, art, byo_key, prov)
+        except GenerationError:
+            # A repair turn that errors (no content, unparseable) must not lose a
+            # good-enough trace from an earlier turn.
+            if thin_best:
+                problem, cost, bad = thin_best
+                log(f"repair errored; shipping the thin trace held from attempt 1", byo_key)
+                return problem, cost
+            raise
         took = time.time() - t0
         _add(total, u)
         cost += _cost(u)  # a repair round costs real money; it is billed, not free
-        problem = decode(wire, art)
+        problem = fix_leetcode_number(land_on_return(decode(wire, art)))
         bad = validate(problem)
         if not bad:
             return problem, cost
+        if all(b.startswith(THIN) for b in bad):
+            # Replays correctly, just thin. Hold it: a later attempt may improve
+            # it, but if one errors out instead we must not throw away a working
+            # trace and return a 502. That is exactly what happened before —
+            # attempt 1 was valid-but-thin, the repair returned no content, and
+            # the whole request failed with a good trace already in hand.
+            thin_best = thin_best or (problem, cost, bad)
         log(f"validation failed (attempt {attempt + 1}/{MAX_REPAIRS + 1}): {'; '.join(bad[:4])}", byo_key)
         if attempt == MAX_REPAIRS:
             break
@@ -707,6 +807,10 @@ def _ladder(prov, key, msgs, art, byo_key, total):
                 ),
             },
         ]
+    if thin_best:
+        problem, cost, bad = thin_best
+        log(f"shipping a thin trace: {'; '.join(b[len(THIN):] for b in bad)[:150]}", byo_key)
+        return problem, cost
     raise GenerationError(f"trace still does not replay after {MAX_REPAIRS} repair attempts")
 
 
