@@ -89,6 +89,12 @@ Aim for 15–60 steps per variant and never exceed 400: a trace past that stops
 being watchable. Choose inputs small enough to be honest at that length (a
 4-element array, a 7-node tree).
 
+**An approach and a variant are different axes.** An `approach` is a *strategy*
+for solving the problem — brute force, two pointers, a heap. A `variant` is an
+*input case* — typical, edge, worst-case. Never create an approach called
+"Edge" or "Worst case"; those are variant ids. Every approach carries the SAME
+three variants, so the reader can compare strategies on identical input.
+
 **Two approaches are required, not preferred.** Give the obvious brute force
 first, then the idiomatic solution, and make both return the same `result` for
 the same variant id. The whole point of this site is seeing why the clever

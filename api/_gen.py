@@ -588,6 +588,33 @@ def validate(problem):
             "both returning the same result for each variant id. If there is no "
             "slower version, give two honestly different strategies instead."
         )
+    # An approach is a *strategy*; a variant is an *input*. Models confuse the two
+    # axes, and the two-approach rule above made it worse: asked for more
+    # approaches, gpt-oss-20b padded the array with entries called "Edge" and
+    # "Worst case" carrying one variant each, so the UI showed four approach tabs
+    # and one variant tab. Measured across the authored corpus before enforcing:
+    # all 192 approaches carry exactly 3 variants, no approach id is ever named
+    # after a variant, and 0 of 150 problems have approaches that disagree on
+    # variant ids. So both checks below are the existing house convention.
+    VARIANT_WORDS = {"typical", "edge", "worst-case", "worst case", "best-case"}
+    seen_sets = {
+        tuple(v.get("id") for v in (a.get("variants") or []))
+        for a in problem.get("approaches") or []
+    }
+    if len(seen_sets) > 1:
+        bad.append(
+            THIN + "the approaches do not share the same variant ids "
+            f"({sorted(seen_sets)}); every approach must run the same inputs, or "
+            "the reader cannot compare them side by side"
+        )
+    for a in problem.get("approaches") or []:
+        if (a.get("id") or "").strip().casefold() in VARIANT_WORDS:
+            bad.append(
+                THIN + f"approach {a.get('id')!r} is named after a variant, not a strategy. "
+                "An approach is a way of solving the problem (brute force, two "
+                "pointers); a variant is an input case (typical, edge, worst-case). "
+                "Move it into the variants array of a real approach."
+            )
     n_ex = len(problem.get("examples") or [])
     if n_ex < 2:
         bad.append(
