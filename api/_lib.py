@@ -353,7 +353,11 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
         # A rate limit is the one a caller can act on, and it is not our bug,
         # so name it. The upstream text is never echoed — it can quote the key.
         if getattr(e, "code", None) == 429:
-            return 429, {"error": "rate-limited"}, audit
+            # Same status, opposite advice: a rate limit clears by waiting, an
+            # exhausted quota needs billing or a different provider. Telling
+            # someone to "wait a minute" for the latter wastes their afternoon.
+            reason = getattr(e, "api_code", "") or "rate_limit_exceeded"
+            return 429, {"error": "rate-limited", "reason": reason}, audit
         return 502, {"error": "generation failed"}, audit
 
     # 7. record spend + decrement quota

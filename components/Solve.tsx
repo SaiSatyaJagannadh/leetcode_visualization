@@ -13,7 +13,7 @@ import { Problem } from "@/lib/schema";
 const BYO_STORE = "leetviz.byoKey"; // the key lives here and nowhere else
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
-type Fail = { error: string; capUsd?: number; spentUsd?: number; resets?: string; limit?: number };
+type Fail = { error: string; reason?: string; capUsd?: number; spentUsd?: number; resets?: string; limit?: number };
 
 function useTrace() {
   const [trace, setTrace] = useState<Problem | null>(null);
@@ -75,8 +75,18 @@ function Problem_({ status, fail }: { status: number; fail: Fail }) {
   if (status === 429)
     return (
       <p className="note">
-        OpenAI is rate-limiting this key. Nothing was charged and your daily
-        allowance is untouched. Wait a minute and trace it again, or use your own key below.
+        {fail.reason === "insufficient_quota" ? (
+          <>
+            The OpenAI key on this server is out of credit, so waiting will not help.
+            Add billing to that account, set a fallback provider, or paste your own key below.
+          </>
+        ) : (
+          <>
+            OpenAI is rate-limiting this key. Wait a minute and trace it again, or
+            use your own key below.
+          </>
+        )}{" "}
+        Nothing was charged and your daily allowance is untouched.
       </p>
     );
   return <p className="note">{fail.error}</p>;

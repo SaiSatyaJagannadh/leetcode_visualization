@@ -320,8 +320,18 @@ def _post(payload, key, url, timeout=180):
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
-        return json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        # Both arrive as 429, and the difference is the whole story:
+        # rate_limit_exceeded clears on its own, insufficient_quota never does.
+        # Only the machine-readable code is kept — the prose can quote the key.
+        try:
+            e.api_code = ((json.loads(e.read().decode()) or {}).get("error") or {}).get("code") or ""
+        except Exception:  # noqa: BLE001 — a body we cannot parse must not mask the HTTP error
+            e.api_code = ""
+        raise
 
 
 def _usage(raw):
