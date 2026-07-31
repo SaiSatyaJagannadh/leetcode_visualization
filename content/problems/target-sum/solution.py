@@ -34,7 +34,34 @@ def running_totals(nums, target):
     return counts.get(target, 0)
 
 
+CACHE = {}
+
+
+def choose_each_sign(nums, target):
+    #> The literal question: pick a sign for each number and count the ways to
+    #> land on the target. Keyed on (position, running total), the memo merges
+    #> branches that arrived at the same place — the same merging the forward
+    #> pass gets for free by storing totals in a map.
+    CACHE.clear()
+    return _ways(nums, target, 0, 0)
+
+
+def _ways(nums, target, i, total):
+    if i == len(nums):
+        #> Every number has a sign now, so this is one complete assignment.
+        return 1 if total == target else 0
+    key = str(i) + ":" + str(total)
+    if key in CACHE:
+        return CACHE[key]
+    #> Both signs are always available; the counts add.
+    CACHE[key] = _ways(nums, target, i + 1, total + nums[i]) + _ways(nums, target, i + 1, total - nums[i])
+    return CACHE[key]
+
+
 APPROACHES = [
+    {"id": "choose", "label": "Pick a sign, memoised", "fn": choose_each_sign,
+     "complexity": {"time": "O(n \u00b7 sum)", "space": "O(n \u00b7 sum)"},
+     "viz": {"nums": "array", "CACHE": "map", "$calls": "recursion"}},
     {"id": "totals", "label": "Count reachable totals", "fn": running_totals,
      "complexity": {"time": "O(n · sum)", "space": "O(sum)"},
      "viz": {"nums": "array", "counts": "map", "nxt": "map"}},

@@ -34,7 +34,35 @@ def bottom_up(s, words):
     return ok[len(s)]
 
 
+MEMO = {}
+
+
+def top_down(s, words):
+    #> Asked from the front: can the rest be built starting at position i? The
+    #> memo is doing the same job as the table, filled only where needed.
+    MEMO.clear()
+    return _from(s, words, 0)
+
+
+def _from(s, words, i):
+    if i == len(s):
+        #> Consumed the whole string, so the cuts made getting here all worked.
+        return True
+    if i in MEMO:
+        return MEMO[i]
+    MEMO[i] = False
+    for w in words:
+        #> Try each word as the next piece. Only one has to lead anywhere.
+        if s[i:i + len(w)] == w and _from(s, words, i + len(w)):
+            MEMO[i] = True
+            break
+    return MEMO[i]
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Can the rest be built?", "fn": top_down,
+     "complexity": {"time": "O(n \u00b7 w \u00b7 L)", "space": "O(n)"},
+     "viz": {"s": "array", "words": "array", "MEMO": "map", "$calls": "recursion"}},
     {"id": "bottom-up", "label": "Buildable prefixes", "fn": bottom_up,
      "complexity": {"time": "O(n · w · L)", "space": "O(n)"},
      "viz": {"s": "array", "ok": "array", "i": "pointer:ok", "words": "array"}},

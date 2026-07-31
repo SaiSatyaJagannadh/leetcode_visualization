@@ -37,7 +37,25 @@ def track_both_ends(nums):
     return best
 
 
+def every_run(nums):
+    #> Multiply out every run and keep the largest. No cleverness about signs is
+    #> needed because nothing is being carried forward — which is exactly why it
+    #> costs a factor of n more than tracking the two extremes.
+    best = nums[0]
+    for i in range(len(nums)):
+        product = 1
+        for j in range(i, len(nums)):
+            #> Extend the run starting at i one number at a time.
+            product *= nums[j]
+            if product > best:
+                best = product
+    return best
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Multiply out every run", "fn": every_run,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"nums": "array", "i": "pointer:nums", "j": "pointer:nums"}},
     {"id": "both-ends", "label": "Track the highest and lowest", "fn": track_both_ends,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"nums": "array", "i": "pointer:nums", "candidates": "array"}},
