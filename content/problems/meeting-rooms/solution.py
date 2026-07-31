@@ -31,7 +31,25 @@ def sort_and_compare(intervals):
     return True
 
 
+def compare_every_pair(intervals):
+    #> Without sorting there is no neighbour to rely on, so every meeting has to
+    #> be checked against every other one.
+    for i in range(len(intervals)):
+        for j in range(i + 1, len(intervals)):
+            a = intervals[i]
+            b = intervals[j]
+            #> Two meetings clash unless one finishes before the other begins.
+            #> Touching at a boundary is allowed, hence the strict comparisons.
+            if a[0] < b[1] and b[0] < a[1]:
+                return False
+    #> Nothing overlapped anything, so one room is enough.
+    return True
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Compare every pair", "fn": compare_every_pair,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"intervals": "intervals", "i": "pointer:intervals", "j": "pointer:intervals"}},
     {"id": "sort", "label": "Sort, then check neighbours", "fn": sort_and_compare,
      "complexity": {"time": "O(n log n)", "space": "O(n)"},
      "viz": {"intervals": "intervals", "spans": "intervals", "i": "pointer:spans"}},

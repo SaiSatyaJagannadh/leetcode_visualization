@@ -37,7 +37,40 @@ def table(s, t):
     return dp[len(s)][len(t)]
 
 
+CACHE = {}
+
+
+def top_down(s, t):
+    #> Read as a choice instead of a table: at each character of s, skip it, or
+    #> use it when it matches. The count is the number of ways to reach the end.
+    CACHE.clear()
+    return _count(s, t, 0, 0)
+
+
+def _count(s, t, i, j):
+    if j == len(t):
+        #> The whole target is matched, so the path taken here is one way.
+        return 1
+    if i == len(s):
+        #> Ran out of source with target left over.
+        return 0
+    key = str(i) + ":" + str(j)
+    if key in CACHE:
+        return CACHE[key]
+    #> Skipping this character of s is always allowed.
+    total = _count(s, t, i + 1, j)
+    if s[i] == t[j]:
+        #> A match adds a second, separate way rather than replacing the first —
+        #> which is why the table version adds instead of taking a maximum.
+        total += _count(s, t, i + 1, j + 1)
+    CACHE[key] = total
+    return total
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Skip it or use it", "fn": top_down,
+     "complexity": {"time": "O(mn)", "space": "O(mn)"},
+     "viz": {"s": "array", "t": "array", "CACHE": "map", "$calls": "recursion"}},
     {"id": "table", "label": "Fill the grid", "fn": table,
      "complexity": {"time": "O(mn)", "space": "O(mn)"},
      "viz": {"dp": "grid", "i": "row:dp", "j": "col:dp", "s": "array", "t": "array"}},

@@ -41,7 +41,43 @@ def kahn(adj):
     return order if len(order) == len(adj) else []
 
 
+ORDER = []
+
+
+def dfs_postorder(adj):
+    #> The other classic topological sort: finish a course's prerequisites, then
+    #> record the course. Postorder is what makes the list come out in order.
+    ORDER.clear()
+    state = {str(k): "new" for k in adj}
+    for course in adj:
+        if not _visit(adj, course, state):
+            #> A cycle makes any ordering impossible, so nothing is returned.
+            return []
+    return [c for c in ORDER]
+
+
+def _visit(adj, course, state):
+    key = str(course)
+    if state[key] == "doing":
+        #> Reached a course still on the current path: that is the cycle.
+        return False
+    if state[key] == "done":
+        return True
+    state[key] = "doing"
+    for need in adj[course]:
+        if not _visit(adj, need, state):
+            return False
+    state[key] = "done"
+    #> Recorded only after every prerequisite is already in the list, so the
+    #> ordering is correct by construction rather than by counting.
+    ORDER.append(course)
+    return True
+
+
 APPROACHES = [
+    {"id": "dfs-postorder", "label": "DFS, record on the way out", "fn": dfs_postorder,
+     "complexity": {"time": "O(V + E)", "space": "O(V)"},
+     "viz": {"adj": "graph", "state": "labels:adj", "ORDER": "queue", "$calls": "recursion"}},
     {"id": "kahn", "label": "Peel off the ready courses", "fn": kahn,
      "complexity": {"time": "O(V + E)", "space": "O(V)"},
      "viz": {"adj": "graph", "waiting": "labels:adj", "order": "queue", "ready": "queue"}},
