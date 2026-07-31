@@ -56,7 +56,40 @@ def two_pass_map(head):
     return copies[head.nid]
 
 
+def interleave(head):
+    if head is None:
+        return None
+    #> No map at all. Weave each copy in directly behind its original, so the
+    #> original itself becomes the lookup table: orig.next IS orig's copy.
+    node = head
+    while node is not None:
+        made = ListNode(node.val)
+        made.next = node.next
+        node.next = made
+        node = made.next
+    #> Now a random pointer translates in one hop: the copy of node.random is
+    #> sitting immediately after it.
+    node = head
+    while node is not None:
+        if node.random is not None:
+            node.next.random = node.random.next
+        node = node.next.next
+    #> Finally unpick the two lists, restoring the original as we go.
+    node = head
+    out = head.next
+    while node is not None:
+        made = node.next
+        node.next = made.next
+        if made.next is not None:
+            made.next = made.next.next
+        node = node.next
+    return out
+
+
 APPROACHES = [
+    {"id": "interleave", "label": "Weave the copies in", "fn": interleave,
+     "complexity": {"time": "O(n)", "space": "O(1)"},
+     "viz": {"head": "node", "node": "node", "made": "node", "out": "node"}},
     {"id": "map", "label": "Copy first, wire second", "fn": two_pass_map,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"head": "node", "node": "node", "clone": "node"}},
