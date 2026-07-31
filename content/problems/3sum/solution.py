@@ -50,7 +50,31 @@ def sort_and_sweep(nums):
     return out
 
 
+def every_triple(nums):
+    #> Sort first for the same two reasons, minus the two-pointer trick: equal
+    #> values sit together, and each triple comes out in a canonical order.
+    ordered = sorted(nums)
+    out = []
+    seen = {}
+    for i in range(len(ordered) - 2):
+        for j in range(i + 1, len(ordered) - 1):
+            for k in range(j + 1, len(ordered)):
+                #> Check every combination of three positions. Nothing is skipped,
+                #> which is the whole cost: this is O(n^3) where the sweep is O(n^2).
+                if ordered[i] + ordered[j] + ordered[k] == 0:
+                    key = str(ordered[i]) + "," + str(ordered[j]) + "," + str(ordered[k])
+                    if key not in seen:
+                        #> Same values can appear at different positions, so the
+                        #> triple itself is the key, not the indices.
+                        seen[key] = True
+                        out.append([ordered[i], ordered[j], ordered[k]])
+    return out
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Every triple", "fn": every_triple,
+     "complexity": {"time": "O(n\u00b3)", "space": "O(n)"},
+     "viz": {"ordered": "array", "i": "pointer:ordered", "j": "pointer:ordered", "k": "pointer:ordered"}},
     {"id": "sort-sweep", "label": "Sort, then two pointers", "fn": sort_and_sweep,
      "complexity": {"time": "O(n²)", "space": "O(n)"},
      "viz": {"ordered": "array", "i": "pointer:ordered", "lo": "pointer:ordered", "hi": "pointer:ordered"}},

@@ -45,7 +45,39 @@ def with_stack(tokens):
     return stack[0]
 
 
+POS = [0]
+
+
+def by_recursion(tokens):
+    #> Read from the right: the last token is the outermost operator.
+    POS[0] = len(tokens) - 1
+    return _eval(tokens)
+
+
+def _eval(tokens):
+    tok = tokens[POS[0]]
+    POS[0] -= 1
+    if tok not in OPS:
+        #> A number is a leaf; it evaluates to itself.
+        return int(tok)
+    #> Reading right to left, the RIGHT operand is met first — the mirror of the
+    #> stack version, where the right operand is the first thing popped.
+    right = _eval(tokens)
+    left = _eval(tokens)
+    if tok == "+":
+        return left + right
+    if tok == "-":
+        return left - right
+    if tok == "*":
+        return left * right
+    #> Truncate toward zero, matching the stack version exactly.
+    return int(left / right)
+
+
 APPROACHES = [
+    {"id": "recursive", "label": "Recurse from the right", "fn": by_recursion,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"tokens": "array", "$calls": "recursion"}},
     {"id": "stack", "label": "Stack", "fn": with_stack,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"stack": "stack", "tokens": "array"}},

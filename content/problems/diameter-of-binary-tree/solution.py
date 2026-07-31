@@ -43,7 +43,38 @@ def _walk(node):
     return 1 + max(left, right)
 
 
+def recompute_heights(root):
+    #> Ask, at every node, how long a path bending here would be.
+    return _widest(root)
+
+
+def _widest(node):
+    if node is None:
+        return 0
+    #> Both heights are computed from scratch, so every subtree is walked once
+    #> per ancestor. That repetition is the whole difference from the one-pass.
+    here = _height(node.left) + _height(node.right)
+    best = here
+    #> The best bend might be further down, so ask both children too.
+    left = _widest(node.left)
+    right = _widest(node.right)
+    if left > best:
+        best = left
+    if right > best:
+        best = right
+    return best
+
+
+def _height(node):
+    if node is None:
+        return 0
+    return 1 + max(_height(node.left), _height(node.right))
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Re-measure at every node", "fn": recompute_heights,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(h)"},
+     "viz": {"root": "node", "$calls": "recursion"}},
     {"id": "one-pass", "label": "Depth, tracking the best bend", "fn": depth_and_diameter,
      "complexity": {"time": "O(n)", "space": "O(h)"},
      "viz": {"root": "node", "$calls": "recursion"}},

@@ -35,7 +35,39 @@ def bottom_up(coins, amount):
     return -1 if best[amount] == BIG else best[amount]
 
 
+MEMO = {}
+
+
+def top_down(coins, amount):
+    MEMO.clear()
+    got = _fewest(coins, amount)
+    return -1 if got >= BIG else got
+
+
+def _fewest(coins, amount):
+    #> Nothing left to make, so nothing left to spend.
+    if amount == 0:
+        return 0
+    if amount < 0:
+        return BIG
+    if amount in MEMO:
+        #> Already solved this amount on another branch. Without this line the
+        #> same subproblem is recomputed down every path and the tree explodes.
+        return MEMO[amount]
+    best = BIG
+    for c in coins:
+        #> Commit to one coin and ask the same question about what remains.
+        got = _fewest(coins, amount - c)
+        if got + 1 < best:
+            best = got + 1
+    MEMO[amount] = best
+    return best
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Recursion with a memo", "fn": top_down,
+     "complexity": {"time": "O(amount \u00b7 coins)", "space": "O(amount)"},
+     "viz": {"coins": "array", "MEMO": "map", "$calls": "recursion"}},
     {"id": "bottom-up", "label": "Build every amount upward", "fn": bottom_up,
      "complexity": {"time": "O(amount · coins)", "space": "O(amount)"},
      "viz": {"coins": "array", "best": "array", "a": "pointer:best"}},
