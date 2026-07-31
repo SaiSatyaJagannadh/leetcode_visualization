@@ -47,7 +47,36 @@ def open_range(s):
     return low == 0
 
 
+def two_sweeps(s):
+    #> A different proof entirely: sweep left to right treating every star as an
+    #> opener, then right to left treating every star as a closer. If neither
+    #> sweep ever goes negative, some assignment works.
+    count = 0
+    for ch in s:
+        #> Most generous reading for openers — if this fails, nothing can help.
+        if ch == ")":
+            count -= 1
+        else:
+            count += 1
+        if count < 0:
+            return False
+    count = 0
+    for i in range(len(s) - 1, -1, -1):
+        ch = s[i]
+        #> Now the mirror: too many openers is just as fatal seen from the right.
+        if ch == "(":
+            count -= 1
+        else:
+            count += 1
+        if count < 0:
+            return False
+    return True
+
+
 APPROACHES = [
+    {"id": "two-sweeps", "label": "Sweep from both ends", "fn": two_sweeps,
+     "complexity": {"time": "O(n)", "space": "O(1)"},
+     "viz": {"s": "array", "i": "pointer:s"}},
     {"id": "range", "label": "Track the possible range", "fn": open_range,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"s": "array"}},

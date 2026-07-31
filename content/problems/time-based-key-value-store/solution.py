@@ -44,7 +44,30 @@ def store(writes, queries):
     return out
 
 
+def scan_backwards(writes, queries):
+    #> No binary search: walk the log from the newest entry back and stop at the
+    #> first one old enough. Correct without needing the log to be sorted at
+    #> all — which is exactly the property binary search depends on.
+    log = []
+    for w in writes:
+        log.append(w)
+    out = []
+    for t in queries:
+        answer = ""
+        for i in range(len(log) - 1, -1, -1):
+            if log[i][0] <= t:
+                #> Walking from the newest end means the first match IS the
+                #> latest write at or before t.
+                answer = log[i][1]
+                break
+        out.append(answer)
+    return out
+
+
 APPROACHES = [
+    {"id": "scan", "label": "Walk back from the newest", "fn": scan_backwards,
+     "complexity": {"time": "O(q \u00b7 n)", "space": "O(n)"},
+     "viz": {"log": "array", "out": "queue", "i": "pointer:log"}},
     {"id": "binary", "label": "Binary search the log", "fn": store,
      "complexity": {"time": "O(log n) per get", "space": "O(n)"},
      "viz": {"log": "array", "out": "queue", "queries": "array", "lo": "pointer:log", "hi": "pointer:log", "mid": "pointer:log"}},
