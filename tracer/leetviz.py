@@ -15,6 +15,7 @@ import json
 import math
 import sys
 
+import structs
 from structs import NODE_TYPES, ListNode, TreeNode
 
 SCHEMA_VERSION = 1
@@ -318,6 +319,9 @@ def circle_layout(keys):
 
 def build_problem(mod):
     """Turn a solution module (META / VARIANTS / APPROACHES) into a trace file."""
+    # Deterministic node ids: the same problem produces the same trace whether
+    # it is rebuilt alone or as one of 150.
+    structs.reset_ids()
     approaches = []
     for a in mod.APPROACHES:
         variants = []

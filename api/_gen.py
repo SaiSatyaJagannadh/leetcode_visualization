@@ -137,7 +137,23 @@ def chain(role):
     """Providers to try for this role, in ORDER, skipping any that lack a key or
     a model name. The first one is the primary; the rest are fallbacks, so a
     healthy primary never silently downgrades."""
-    return [_ALL[i] for i in ORDER if _ALL[i].ready(role)]
+    return [_ALL[i] for i in ORDER if _ALL[i].ready(role) and _ALL[i].id not in _DEAD]
+
+
+# A provider whose account is empty will be empty on the next request too, so
+# remembering it turns two wasted round-trips per request into zero. Only
+# terminal billing states go in here — a rate limit or a 5xx is temporary and
+# must keep being retried.
+_DEAD = {}
+_TERMINAL = ("insufficient_quota", "credit_balance_exhausted", "billing_hard_limit_reached")
+
+
+def _mark_if_dead(prov, e):
+    code = getattr(e, "api_code", "") or ""
+    if code in _TERMINAL:
+        if prov.id not in _DEAD:
+            log(f"{prov.id} reports {code}; skipping it until this process restarts")
+        _DEAD[prov.id] = code
 
 
 def _retryable(e):
@@ -752,6 +768,7 @@ def generate(prompt, byo_key=None):
             _lib.store.incr(f"prov:{_lib.month_key()}:{prov.id}")
             return problem, (0.0 if byo_key else cost), total
         except Exception as e:  # noqa: BLE001 — re-raised unless a fallback exists
+            _mark_if_dead(prov, e)
             if not (i + 1 < len(provs) and _retryable(e)):
                 raise
             log(
@@ -896,6 +913,7 @@ def canonical(prompt):
             )
             return json.loads(raw["choices"][0]["message"]["content"])["canonical"]
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError) as e:
+            _mark_if_dead(prov, e)
             log(f"normalize via {prov.id} failed: {type(e).__name__}")
     # Every provider missing or failing means a colder cache, never a 502.
     return None

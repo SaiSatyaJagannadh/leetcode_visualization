@@ -12,6 +12,16 @@ _ids = count()
 _next_id = _ids.__next__  # `next` is a parameter name below, so bind it here
 
 
+def reset_ids():
+    """Restart node numbering. Called once per problem so a trace's ids depend
+    only on that problem, not on how many nodes earlier problems happened to
+    create. Without this, `build.py <one-slug>` renumbers every node and git
+    shows a diff on files whose structure and results did not change at all."""
+    global _ids, _next_id
+    _ids = count()
+    _next_id = _ids.__next__
+
+
 class ListNode:
     __slots__ = ("val", "next", "random", "nid", "pos")
 
