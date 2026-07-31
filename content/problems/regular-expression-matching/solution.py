@@ -42,7 +42,39 @@ def table(s, p):
     return dp[len(s)][len(p)]
 
 
+MEMO = {}
+
+
+def top_down(s, p):
+    #> The same rules asked from the front, which is where the star's two
+    #> options read most naturally: use it zero times, or consume one character
+    #> and stay on it.
+    MEMO.clear()
+    return _match(s, p, 0, 0)
+
+
+def _match(s, p, i, j):
+    if j == len(p):
+        #> Pattern exhausted; this only worked if the string is too.
+        return i == len(s)
+    key = str(i) + ":" + str(j)
+    if key in MEMO:
+        return MEMO[key]
+    here = i < len(s) and (p[j] == "." or p[j] == s[i])
+    if j + 1 < len(p) and p[j + 1] == "*":
+        #> Skip the whole x* group, or use it once more and stay put.
+        out = _match(s, p, i, j + 2) or (here and _match(s, p, i + 1, j))
+    else:
+        #> Ordinary character: both sides advance together or it fails.
+        out = here and _match(s, p, i + 1, j + 1)
+    MEMO[key] = out
+    return out
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Match from the front", "fn": top_down,
+     "complexity": {"time": "O(mn)", "space": "O(mn)"},
+     "viz": {"MEMO": "map", "$calls": "recursion"}},
     {"id": "table", "label": "Fill the grid", "fn": table,
      "complexity": {"time": "O(mn)", "space": "O(mn)"},
      "viz": {"dp": "grid", "i": "row:dp", "j": "col:dp"}},

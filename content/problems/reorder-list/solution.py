@@ -53,7 +53,39 @@ def split_reverse_weave(head):
     return head
 
 
+def index_the_nodes(head):
+    #> Collect every node into a list first, then rewire by index: front, back,
+    #> front+1, back-1, and so on. No middle to find and nothing to reverse —
+    #> the array gives random access the list itself never had, at the cost of
+    #> O(n) extra space, which is the whole trade.
+    if head is None:
+        return None
+    nodes = []
+    node = head
+    while node is not None:
+        nodes.append(node)
+        node = node.next
+    lo = 0
+    hi = len(nodes) - 1
+    while lo < hi:
+        #> Front node points at the back one.
+        nodes[lo].next = nodes[hi]
+        lo += 1
+        if lo == hi:
+            #> Odd length: the middle node is now the tail.
+            break
+        #> And that back node points at the next front one.
+        nodes[hi].next = nodes[lo]
+        hi -= 1
+    #> Whichever node ended in the middle terminates the list.
+    nodes[lo].next = None
+    return head
+
+
 APPROACHES = [
+    {"id": "index", "label": "Collect and rewire by index", "fn": index_the_nodes,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"head": "node", "nodes": "array", "lo": "pointer:nodes", "hi": "pointer:nodes"}},
     {"id": "split-reverse-weave", "label": "Split, reverse, weave", "fn": split_reverse_weave,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"head": "node", "slow": "node", "fast": "node", "first": "node", "second": "node", "prev": "node"}},
