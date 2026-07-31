@@ -60,7 +60,27 @@ def _pop(heap):
     return top
 
 
+def resort_each_time(k, stream):
+    #> The obvious version: keep everything, sort after each arrival, index in.
+    #> It orders the entire history when only one slot is ever read.
+    seen = []
+    out = []
+    for v in stream:
+        seen.append(v)
+        ordered = sorted(seen)
+        if len(ordered) >= k:
+            #> Counting back k from the end gives the kth largest.
+            out.append(ordered[len(ordered) - k])
+        else:
+            #> Fewer than k values so far, so there is no kth largest yet.
+            out.append(None)
+    return out
+
+
 APPROACHES = [
+    {"id": "resort", "label": "Sort after every arrival", "fn": resort_each_time,
+     "complexity": {"time": "O(n\u00b2 log n)", "space": "O(n)"},
+     "viz": {"stream": "array", "seen": "array", "ordered": "array", "out": "queue"}},
     {"id": "min-heap", "label": "Min-heap of size k", "fn": min_heap_of_k,
      "complexity": {"time": "O(log k) per add", "space": "O(k)"},
      "viz": {"heap": "heap", "out": "queue", "stream": "array"}},

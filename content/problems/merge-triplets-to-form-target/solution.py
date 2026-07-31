@@ -34,7 +34,26 @@ def usable_only(triplets, target):
     return best == target
 
 
+def prove_each_position(triplets, target):
+    #> Ask the question one position at a time: is there a triplet that supplies
+    #> target[i] exactly, without exceeding the target anywhere else? If every
+    #> position has such a witness, merging exactly those triplets lands on the
+    #> target — which is why the greedy sweep is allowed to merge everything.
+    found = [False, False, False]
+    for i in range(3):
+        for t in triplets:
+            if t[0] > target[0] or t[1] > target[1] or t[2] > target[2]:
+                #> Unusable at any position, so it cannot be the witness here.
+                continue
+            if t[i] == target[i]:
+                found[i] = True
+    return found[0] and found[1] and found[2]
+
+
 APPROACHES = [
+    {"id": "witness", "label": "Find a witness per position", "fn": prove_each_position,
+     "complexity": {"time": "O(n)", "space": "O(1)"},
+     "viz": {"triplets": "array", "target": "array", "found": "array", "i": "pointer:target"}},
     {"id": "usable", "label": "Merge everything that fits", "fn": usable_only,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"triplets": "array", "best": "array", "target": "array"}},

@@ -49,7 +49,36 @@ def flood(grid):
     return best
 
 
+def recursive_area(grid):
+    #> Recursion instead of an explicit stack. The call tree is the search: each
+    #> frame sinks its own cell and asks its four neighbours for their areas,
+    #> so the total comes back up the tree rather than being accumulated in a loop.
+    best = 0
+    for r in range(len(grid)):
+        for c in range(len(grid[0])):
+            if grid[r][c] != 1:
+                continue
+            area = _sink(grid, r, c)
+            if area > best:
+                best = area
+    return best
+
+
+def _sink(grid, r, c):
+    if r < 0 or r >= len(grid) or c < 0 or c >= len(grid[0]):
+        return 0
+    if grid[r][c] != 1:
+        #> Water, or land already counted on this same island.
+        return 0
+    #> Mark before recursing, or the neighbour recurses straight back here.
+    grid[r][c] = 2
+    return 1 + _sink(grid, r + 1, c) + _sink(grid, r - 1, c) + _sink(grid, r, c + 1) + _sink(grid, r, c - 1)
+
+
 APPROACHES = [
+    {"id": "recursive", "label": "Recursive flood fill", "fn": recursive_area,
+     "complexity": {"time": "O(rc)", "space": "O(rc)"},
+     "viz": {"grid": "grid", "r": "row:grid", "c": "col:grid", "$calls": "recursion"}},
     {"id": "flood", "label": "Flood fill, measuring", "fn": flood,
      "complexity": {"time": "O(rc)", "space": "O(rc)"},
      "viz": {"grid": "grid", "stack": "cells:grid", "r": "row:grid", "c": "col:grid"}},
