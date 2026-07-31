@@ -56,7 +56,36 @@ def _match(node, query, i):
     return _match(node[ch], query, i + 1)
 
 
+def scan_every_word(words, queries):
+    #> No trie at all: keep the words in a list and compare each query against
+    #> every one of them. This is what the trie buys you — the trie shares
+    #> prefixes so a query stops as soon as no word can still match.
+    out = []
+    for query in queries:
+        hit = False
+        for word in words:
+            if _same(word, query):
+                hit = True
+        out.append(hit)
+    return out
+
+
+def _same(word, query):
+    if len(word) != len(query):
+        #> A dot matches one character, never zero or several, so length is
+        #> a cheap first filter.
+        return False
+    for i in range(len(query)):
+        #> A dot accepts whatever is there; anything else must match exactly.
+        if query[i] != "." and query[i] != word[i]:
+            return False
+    return True
+
+
 APPROACHES = [
+    {"id": "linear-scan", "label": "Compare against every word", "fn": scan_every_word,
+     "complexity": {"time": "O(words \u00b7 len)", "space": "O(1)"},
+     "viz": {"words": "array", "queries": "array", "out": "queue"}},
     {"id": "trie", "label": "Trie with branching search", "fn": wildcard_trie,
      "complexity": {"time": "O(26^dots · n)", "space": "O(total chars)"},
      "viz": {"root": "trie", "node": "trie", "out": "queue", "queries": "array", "$calls": "recursion"}},

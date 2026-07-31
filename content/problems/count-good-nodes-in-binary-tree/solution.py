@@ -39,7 +39,32 @@ def _walk(node, best):
     return count
 
 
+def check_the_whole_path(root):
+    #> Without the carried maximum, each node has to look back over everything
+    #> above it. Same answer, but the work grows with depth at every node.
+    return _count(root, [])
+
+
+def _count(node, path):
+    if node is None:
+        return 0
+    good = 1
+    for v in path:
+        #> Re-scan the entire ancestor list. The carried-max version replaces
+        #> this whole loop with a single comparison.
+        if v > node.val:
+            good = 0
+    path.append(node.val)
+    total = good + _count(node.left, path) + _count(node.right, path)
+    #> Pop on the way back up so a sibling never sees this branch's ancestors.
+    path.pop()
+    return total
+
+
 APPROACHES = [
+    {"id": "whole-path", "label": "Re-scan the whole path", "fn": check_the_whole_path,
+     "complexity": {"time": "O(n\u00b7h)", "space": "O(h)"},
+     "viz": {"root": "node", "path": "stack", "$calls": "recursion"}},
     {"id": "carry-max", "label": "Carry the path maximum down", "fn": carry_the_max,
      "complexity": {"time": "O(n)", "space": "O(h)"},
      "viz": {"root": "node", "$calls": "recursion"}},

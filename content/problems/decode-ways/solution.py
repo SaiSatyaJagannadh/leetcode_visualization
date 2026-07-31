@@ -34,7 +34,39 @@ def bottom_up(s):
     return ways[len(s)]
 
 
+MEMO = {}
+
+
+def top_down(s):
+    #> Same recurrence read forwards: from position i, how many ways are there
+    #> to read the rest? The memo is what keeps it linear.
+    MEMO.clear()
+    return _from(s, 0)
+
+
+def _from(s, i):
+    if i == len(s):
+        #> Consumed the whole string, so the choices made getting here are one
+        #> valid reading.
+        return 1
+    if s[i] == "0":
+        #> No letter is encoded by a leading zero, so this branch is dead.
+        return 0
+    if i in MEMO:
+        return MEMO[i]
+    #> Take one digit as a letter.
+    total = _from(s, i + 1)
+    #> Or take two, if they land in the 10..26 range that has a letter.
+    if i + 1 < len(s) and "10" <= s[i:i + 2] <= "26":
+        total += _from(s, i + 2)
+    MEMO[i] = total
+    return total
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Recursion with a memo", "fn": top_down,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"s": "array", "MEMO": "map", "$calls": "recursion"}},
     {"id": "bottom-up", "label": "One or two digits at a time", "fn": bottom_up,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"s": "array", "ways": "array", "i": "pointer:ways"}},

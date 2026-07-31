@@ -14,7 +14,7 @@ META = {
 }
 
 VARIANTS = [
-    {"id": "typical", "label": "Typical", "input": {"candidates": [10, 1, 2, 7, 6, 1, 5], "target": 8}},
+    {"id": "typical", "label": "Typical", "input": {"candidates": [1, 2, 7, 6, 1], "target": 8}},
     {"id": "edge", "label": "No solution", "input": {"candidates": [3, 3], "target": 5}},
     {"id": "worst-case", "label": "Many repeats", "input": {"candidates": [2, 5, 2, 1, 2], "target": 5}},
 ]
@@ -41,7 +41,42 @@ def backtrack(candidates, target, start=0, current=None, out=None):
     return out
 
 
+SEEN = {}
+
+
+def dedupe_at_the_end(candidates, target):
+    #> The blunt alternative: explore every subset and throw away repeats at the
+    #> end, instead of pruning them at the branch. Same answers, far more work.
+    SEEN.clear()
+    ordered = sorted(candidates)
+    out = []
+    _all_subsets(ordered, target, 0, [], out)
+    return out
+
+
+def _all_subsets(candidates, target, i, current, out):
+    if target == 0:
+        key = ",".join([str(x) for x in current])
+        #> Sorted input means an identical combination always spells the same
+        #> key, so the set catches duplicates the pruned version never creates.
+        if key not in SEEN:
+            SEEN[key] = True
+            out.append(list(current))
+        return
+    if target < 0 or i >= len(candidates):
+        return
+    #> Take this entry, then move past it — each may be used once.
+    current.append(candidates[i])
+    _all_subsets(candidates, target - candidates[i], i + 1, current, out)
+    current.pop()
+    #> Or skip it. No duplicate check here, which is exactly the difference.
+    _all_subsets(candidates, target, i + 1, current, out)
+
+
 APPROACHES = [
+    {"id": "dedupe-late", "label": "Every subset, dedupe at the end", "fn": dedupe_at_the_end,
+     "complexity": {"time": "O(2\u207f)", "space": "O(2\u207f)"},
+     "viz": {"ordered": "array", "current": "stack", "out": "queue", "SEEN": "map", "$calls": "recursion"}},
     {"id": "backtrack", "label": "Sort, skip repeats, advance", "fn": backtrack,
      "complexity": {"time": "O(2ⁿ)", "space": "O(n)"},
      "viz": {"candidates": "array", "current": "stack", "out": "queue", "$calls": "recursion"}},
