@@ -42,7 +42,44 @@ def digit_by_digit(a, b):
     return dummy.next
 
 
+def via_integers(a, b):
+    #> Read each list into a plain number first. Reversed storage means the
+    #> first node is the ones column, so each step multiplies the place value.
+    x = 0
+    mult = 1
+    node = a
+    while node is not None:
+        x += node.val * mult
+        mult *= 10
+        node = node.next
+    y = 0
+    mult = 1
+    node = b
+    while node is not None:
+        y += node.val * mult
+        mult *= 10
+        node = node.next
+    total = x + y
+    #> Then write the sum back out, ones column first again.
+    dummy = ListNode(0)
+    tail = dummy
+    if total == 0:
+        tail.next = ListNode(0)
+        return dummy.next
+    while total > 0:
+        #> This only works because Python integers are unbounded. In a language
+        #> with 64-bit ints the digit-by-digit walk is the only correct option,
+        #> which is the real argument for it.
+        tail.next = ListNode(total % 10)
+        tail = tail.next
+        total = total // 10
+    return dummy.next
+
+
 APPROACHES = [
+    {"id": "via-integers", "label": "Add as whole numbers", "fn": via_integers,
+     "complexity": {"time": "O(max(m,n))", "space": "O(max(m,n))"},
+     "viz": {"a": "node", "b": "node", "dummy": "node", "tail": "node", "node": "node"}},
     {"id": "digits", "label": "Digit by digit", "fn": digit_by_digit,
      "complexity": {"time": "O(max(m,n))", "space": "O(max(m,n))"},
      "viz": {"a": "node", "b": "node", "dummy": "node", "tail": "node"}},

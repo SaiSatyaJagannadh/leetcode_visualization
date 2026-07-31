@@ -31,7 +31,37 @@ def by_coin(amount, coins):
     return ways[amount]
 
 
+CACHE = {}
+
+
+def by_recursion(amount, coins):
+    #> The same count asked top-down: from coin index i, how many ways make a?
+    CACHE.clear()
+    return _ways(amount, coins, 0)
+
+
+def _ways(amount, coins, i):
+    if amount == 0:
+        #> Landed exactly, so the choices made on the way here are one way.
+        return 1
+    if amount < 0 or i >= len(coins):
+        return 0
+    key = str(i) + ":" + str(amount)
+    if key in CACHE:
+        return CACHE[key]
+    #> Use coin i again, staying at i — this is what makes 1+2 and 2+1 the same
+    #> combination rather than two, exactly as the outer coin loop does.
+    same = _ways(amount - coins[i], coins, i)
+    #> Or retire coin i for good and move on.
+    nxt = _ways(amount, coins, i + 1)
+    CACHE[key] = same + nxt
+    return CACHE[key]
+
+
 APPROACHES = [
+    {"id": "recursive", "label": "Recursion with a memo", "fn": by_recursion,
+     "complexity": {"time": "O(amount \u00b7 coins)", "space": "O(amount \u00b7 coins)"},
+     "viz": {"coins": "array", "CACHE": "map", "$calls": "recursion"}},
     {"id": "by-coin", "label": "One coin at a time", "fn": by_coin,
      "complexity": {"time": "O(amount · coins)", "space": "O(amount)"},
      "viz": {"coins": "array", "ways": "array", "a": "pointer:ways"}},

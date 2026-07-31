@@ -48,7 +48,34 @@ def _copy(adj, node, made):
     return made[key]
 
 
+def bfs_clone(adj, start):
+    #> Same job without recursion. The map is still the visited-set, so a node
+    #> is only ever queued once no matter how many edges point at it.
+    made = {}
+    made[str(start)] = []
+    queue = [start]
+    while queue:
+        node = queue.pop(0)
+        key = str(node)
+        for other in adj[node]:
+            #> Record the edge on the copy first — that part does not depend on
+            #> whether the neighbour has been cloned yet.
+            made[key].append(other)
+            if str(other) not in made:
+                #> First sighting: register the clone, then queue it. Registering
+                #> before queueing is what keeps a cycle from queueing it twice.
+                made[str(other)] = []
+                queue.append(other)
+    out = {}
+    for key in made:
+        out[key] = made[key]
+    return out
+
+
 APPROACHES = [
+    {"id": "bfs", "label": "BFS with a clone map", "fn": bfs_clone,
+     "complexity": {"time": "O(V + E)", "space": "O(V)"},
+     "viz": {"adj": "graph", "made": "map", "queue": "queue"}},
     {"id": "dfs", "label": "DFS with a clone map", "fn": dfs_clone,
      "complexity": {"time": "O(V + E)", "space": "O(V)"},
      "viz": {"adj": "graph", "made": "map", "$calls": "recursion"}},

@@ -39,7 +39,31 @@ def backtrack(candidates, target, start=0, current=None, out=None):
     return out
 
 
+def take_or_skip(candidates, target, i=0, current=None, out=None):
+    #> The same search asked as a yes/no question at each candidate instead of a
+    #> loop over the remaining ones. Two branches, not n.
+    if current is None:
+        current, out = [], []
+    if target == 0:
+        out.append(list(current))
+        return out
+    if target < 0 or i >= len(candidates):
+        #> Overshot, or ran out of candidates without landing on zero.
+        return out
+    #> Branch one: take this candidate and stay on it, so it can repeat.
+    current.append(candidates[i])
+    take_or_skip(candidates, target - candidates[i], i, current, out)
+    current.pop()
+    #> Branch two: give up on this candidate for good and move to the next.
+    #> Never coming back is what stops [2,3] and [3,2] both being found.
+    take_or_skip(candidates, target, i + 1, current, out)
+    return out
+
+
 APPROACHES = [
+    {"id": "take-or-skip", "label": "Take it or leave it", "fn": take_or_skip,
+     "complexity": {"time": "O(2^(t/m))", "space": "O(t/m)"},
+     "viz": {"candidates": "array", "current": "stack", "out": "queue", "$calls": "recursion"}},
     {"id": "backtrack", "label": "Backtracking", "fn": backtrack,
      "complexity": {"time": "O(n^(t/m))", "space": "O(t/m)"},
      "viz": {"candidates": "array", "current": "stack", "out": "queue", "$calls": "recursion"}},
