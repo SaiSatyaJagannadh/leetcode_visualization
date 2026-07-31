@@ -41,7 +41,29 @@ def smallest_first(hand, size):
     return True
 
 
+def peel_groups(hand, size):
+    #> No counting map: sort the cards and physically remove each group. Slower,
+    #> but it makes the forced choice obvious — the first card left is always
+    #> the start of the next group, because nothing smaller survives to precede it.
+    if len(hand) % size != 0:
+        return False
+    rest = sorted(hand)
+    while rest:
+        start = rest[0]
+        for step in range(size):
+            want = start + step
+            if want not in rest:
+                #> A required consecutive card is missing, so no arrangement works.
+                return False
+            #> Remove one copy, not all of them — duplicates belong to other groups.
+            rest.remove(want)
+    return True
+
+
 APPROACHES = [
+    {"id": "peel", "label": "Sort and remove each group", "fn": peel_groups,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(n)"},
+     "viz": {"hand": "array", "rest": "array"}},
     {"id": "smallest-first", "label": "The smallest card forces its group", "fn": smallest_first,
      "complexity": {"time": "O(n log n)", "space": "O(n)"},
      "viz": {"hand": "array", "counts": "map"}},

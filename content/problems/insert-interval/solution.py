@@ -42,7 +42,28 @@ def three_phases(intervals, new):
     return out
 
 
+def append_and_merge(intervals, new):
+    #> The blunt version: drop the new interval in, sort everything, then merge
+    #> in one sweep. It ignores the fact that the input was already sorted, which
+    #> is exactly the information the three-phase walk exploits.
+    spans = [[s[0], s[1]] for s in intervals]
+    spans.append([new[0], new[1]])
+    spans = sorted(spans, key=lambda s: s[0])
+    out = []
+    for span in spans:
+        if out and span[0] <= out[-1][1]:
+            #> Overlaps what we are building, so widen it rather than adding.
+            out[-1] = [out[-1][0], max(out[-1][1], span[1])]
+        else:
+            #> A clean gap; nothing later can reach back past it.
+            out.append([span[0], span[1]])
+    return out
+
+
 APPROACHES = [
+    {"id": "sort-merge", "label": "Append, sort, merge", "fn": append_and_merge,
+     "complexity": {"time": "O(n log n)", "space": "O(n)"},
+     "viz": {"intervals": "intervals", "spans": "intervals", "out": "intervals"}},
     {"id": "three-phases", "label": "Before, overlapping, after", "fn": three_phases,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"intervals": "intervals", "out": "intervals", "merged": "interval", "new": "interval"}},

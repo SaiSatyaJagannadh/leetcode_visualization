@@ -47,7 +47,41 @@ def count_edges_and_walk(adj):
     return len(seen) == len(adj)
 
 
+def union_find(adj):
+    #> Merge nodes into groups one edge at a time. If an edge joins two nodes
+    #> already in the same group, that edge closes a cycle — detected the moment
+    #> it happens, with no traversal and no edge-count shortcut.
+    parent = {str(k): str(k) for k in adj}
+    joins = 0
+    for node in adj:
+        for other in adj[node]:
+            if node > other:
+                #> Each undirected edge appears twice; take it once.
+                continue
+            a = _root(parent, str(node))
+            b = _root(parent, str(other))
+            if a == b:
+                #> Already connected, so this edge is the cycle.
+                return False
+            parent[a] = b
+            joins += 1
+    #> n - 1 successful merges means everything ended up in one group.
+    return joins == len(adj) - 1
+
+
+def _root(parent, x):
+    while parent[x] != x:
+        #> Point straight at the grandparent while walking up, which keeps the
+        #> chains short for every later lookup.
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+    return x
+
+
 APPROACHES = [
+    {"id": "union-find", "label": "Union-find", "fn": union_find,
+     "complexity": {"time": "O(E \u00b7 \u03b1)", "space": "O(V)"},
+     "viz": {"adj": "graph", "parent": "labels:adj"}},
     {"id": "count-walk", "label": "Count edges, then walk", "fn": count_edges_and_walk,
      "complexity": {"time": "O(V + E)", "space": "O(V)"},
      "viz": {"adj": "graph", "seen": "marked:adj", "stack": "stack"}},

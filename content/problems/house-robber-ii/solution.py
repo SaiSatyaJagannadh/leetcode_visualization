@@ -41,7 +41,34 @@ def _line(row):
     return max(take, skip)
 
 
+def compare_two_tables(nums):
+    #> Same two runs, but with the whole table kept so both answers are visible
+    #> side by side instead of collapsing into two numbers.
+    if len(nums) == 1:
+        return nums[0]
+    a = _table(nums[:-1])
+    b = _table(nums[1:])
+    #> The circle forbids taking both ends, so the answer is whichever line wins.
+    return max(a[len(a) - 1], b[len(b) - 1])
+
+
+def _table(row):
+    best = [0] * (len(row) + 1)
+    best[1] = row[0]
+    for i in range(2, len(row) + 1):
+        rob = best[i - 2] + row[i - 1]
+        #> Rob this house and add what was safe two back, or keep the running best.
+        if rob > best[i - 1]:
+            best[i] = rob
+        else:
+            best[i] = best[i - 1]
+    return best
+
+
 APPROACHES = [
+    {"id": "tables", "label": "Both tables side by side", "fn": compare_two_tables,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"nums": "array", "a": "array", "b": "array", "best": "array", "i": "pointer:best"}},
     {"id": "two-passes", "label": "Drop one end, twice", "fn": two_passes,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"nums": "array"}},
