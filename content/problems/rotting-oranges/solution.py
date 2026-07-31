@@ -14,7 +14,7 @@ META = {
 }
 
 A = [[2, 1, 1], [1, 1, 0], [0, 1, 1]]
-B = [[2, 1, 1], [0, 1, 1], [1, 0, 1]]
+B = [[2, 1, 0], [0, 1, 1]]
 
 VARIANTS = [
     {"id": "typical", "label": "All rot", "input": lambda: {"grid": [r[:] for r in A]}},
@@ -53,7 +53,41 @@ def bfs_by_minute(grid):
     return -1 if fresh > 0 else minutes
 
 
+def sweep_until_stable(grid):
+    #> No queue and no frontier: sweep the whole grid each minute, rotting every
+    #> fresh orange next to a rotten one, and stop when a pass changes nothing.
+    rows, cols = len(grid), len(grid[0])
+    minutes = 0
+    while True:
+        #> Collect this minute's victims before writing, or a newly rotten
+        #> orange would infect its neighbour within the same minute.
+        doomed = []
+        for r in range(rows):
+            for c in range(cols):
+                if grid[r][c] != 1:
+                    continue
+                for d in ([1, 0], [-1, 0], [0, 1], [0, -1]):
+                    nr, nc = r + d[0], c + d[1]
+                    if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 2:
+                        doomed.append([r, c])
+        if not doomed:
+            #> A pass with no change means everything reachable has rotted.
+            break
+        for cell in doomed:
+            grid[cell[0]][cell[1]] = 2
+        minutes += 1
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] == 1:
+                #> Something fresh survived, so it was never reachable.
+                return -1
+    return minutes
+
+
 APPROACHES = [
+    {"id": "sweep", "label": "Sweep until nothing changes", "fn": sweep_until_stable,
+     "complexity": {"time": "O(rc \u00b7 minutes)", "space": "O(rc)"},
+     "viz": {"grid": "grid", "doomed": "cells:grid", "r": "row:grid", "c": "col:grid"}},
     {"id": "bfs", "label": "BFS from every rotten orange", "fn": bfs_by_minute,
      "complexity": {"time": "O(rc)", "space": "O(rc)"},
      "viz": {"grid": "grid", "frontier": "cells:grid", "nxt": "array", "cell": "array"}},

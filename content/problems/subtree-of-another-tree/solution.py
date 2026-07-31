@@ -42,7 +42,27 @@ def _same(a, b):
     return _same(a.left, b.left) and _same(a.right, b.right)
 
 
+def substring_of_serialised(root, sub):
+    #> Flatten both trees, then ask whether one spelling contains the other.
+    #> Turning a tree question into a string search — and the bracketing is what
+    #> stops a partial subtree matching by accident.
+    big = _spell(root)
+    small = _spell(sub)
+    return small in big
+
+
+def _spell(node):
+    if node is None:
+        return "#"
+    #> Brackets fence each subtree off, so a match inside `big` can only line up
+    #> with a complete subtree rather than a fragment of one.
+    return "(" + str(node.val) + _spell(node.left) + _spell(node.right) + ")"
+
+
 APPROACHES = [
+    {"id": "serialise", "label": "Substring of the flattened tree", "fn": substring_of_serialised,
+     "complexity": {"time": "O(m + n)", "space": "O(m + n)"},
+     "viz": {"root": "node", "sub": "node", "$calls": "recursion"}},
     {"id": "search", "label": "Try every node as the root", "fn": search_every_node,
      "complexity": {"time": "O(mn)", "space": "O(h)"},
      "viz": {"root": "node", "sub": "node", "$calls": "recursion"}},

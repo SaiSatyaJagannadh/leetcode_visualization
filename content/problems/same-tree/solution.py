@@ -35,7 +35,25 @@ def recursive(p, q):
     return recursive(p.left, q.left) and recursive(p.right, q.right)
 
 
+def serialise_and_compare(p, q):
+    #> Flatten each tree to a string and compare the two. The null markers are
+    #> what make it sound: without them, different shapes can flatten to the
+    #> same sequence of values.
+    return _spell(p) == _spell(q)
+
+
+def _spell(node):
+    if node is None:
+        #> An explicit marker for "nothing here" — this is the whole trick.
+        return "#"
+    #> Root first, then both sides, so position is encoded as well as value.
+    return "(" + str(node.val) + _spell(node.left) + _spell(node.right) + ")"
+
+
 APPROACHES = [
+    {"id": "serialise", "label": "Flatten both and compare", "fn": serialise_and_compare,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"p": "node", "q": "node", "$calls": "recursion"}},
     {"id": "recursive", "label": "Walk both at once", "fn": recursive,
      "complexity": {"time": "O(n)", "space": "O(h)"},
      "viz": {"p": "node", "q": "node", "$calls": "recursion"}},
