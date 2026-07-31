@@ -233,6 +233,26 @@ both prefixes; a pattern that only knew `sk-` would let one straight through.
 `/admin/spend` reports `generationsByProvider` so a permanent silent failover is
 visible rather than looking like business as usual.
 
+### Two approaches per problem
+
+148 of 150 problems carry a brute force (or an honestly different strategy)
+alongside the idiomatic one, so the reader can see why the clever version wins.
+`api/_gen.py` enforces the same rule on generated traces.
+
+Two are deliberately left at one approach, both measured rather than assumed:
+
+- **n-queens** — 534 steps at n=4, the smallest board where backtracking
+  actually succeeds (n=2 and n=3 have no solution). A three-set version with an
+  O(1) conflict test measures 514: the count is dominated by the size of the
+  search tree, not the cost of the test, so a second approach buys two
+  over-budget traces instead of one and shows nothing new.
+- **valid-sudoku** — 498 steps. A one-pass-per-rule version measures 1391,
+  because a 9x9 board walked three times is 243 cells before any bookkeeping.
+
+Do not "fix" these by raising `LONG` in `pipeline/check.py`. If you add an
+approach anywhere, note that each approach is measured separately, so a new one
+only needs its own budget under 400 — it does not share the first one's.
+
 ## Content rules
 
 LeetCode and NeetCode problem statements are copyrighted. Slugs, titles,
