@@ -55,7 +55,47 @@ def _make(pre, pi, ino, lo, hi):
     return node
 
 
+def build_with_index(pre, ino):
+    #> Same reconstruction, but the position of each value in the inorder list is
+    #> looked up instead of searched for. The scan version walks the inorder list
+    #> once per node, which is what makes it quadratic on a skewed tree.
+    where = {}
+    for i in range(len(ino)):
+        #> Values are distinct, so one map answers every split in constant time.
+        where[ino[i]] = i
+    cursor = [0]
+    root = _fast(pre, ino, where, cursor, 0, len(ino) - 1)
+    if root is not None:
+        layout_tree(root)
+    out, level = [], [root]
+    while any(n is not None for n in level):
+        nxt = []
+        for n in level:
+            out.append(None if n is None else n.val)
+            nxt.extend([None, None] if n is None else [n.left, n.right])
+        level = nxt
+    while out and out[-1] is None:
+        out.pop()
+    return out
+
+
+def _fast(pre, ino, where, cursor, lo, hi):
+    if lo > hi:
+        return None
+    #> A shared cursor walks preorder forwards, so no index arithmetic is needed
+    #> to skip past a left subtree — it has already consumed exactly its own nodes.
+    node = TreeNode(pre[cursor[0]])
+    split = where[pre[cursor[0]]]
+    cursor[0] += 1
+    node.left = _fast(pre, ino, where, cursor, lo, split - 1)
+    node.right = _fast(pre, ino, where, cursor, split + 1, hi)
+    return node
+
+
 APPROACHES = [
+    {"id": "indexed", "label": "Look the split up, don't scan", "fn": build_with_index,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"pre": "array", "ino": "array", "where": "map", "$calls": "recursion"}},
     {"id": "split", "label": "Split on the inorder index", "fn": build,
      "complexity": {"time": "O(n²)", "space": "O(n)"},
      "viz": {"pre": "array", "ino": "array", "root": "node", "$calls": "recursion"}},

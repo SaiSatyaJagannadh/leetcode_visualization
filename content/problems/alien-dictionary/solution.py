@@ -63,7 +63,48 @@ def _visit(ch, after, state, order):
     return True
 
 
+def kahn(words):
+    #> Same order derived by peeling instead of by depth-first postorder: count
+    #> how many letters must precede each one, then repeatedly take a letter
+    #> with nothing left waiting on it.
+    after = {}
+    for w in words:
+        for ch in w:
+            after.setdefault(ch, {})
+    for i in range(len(words) - 1):
+        a, b = words[i], words[i + 1]
+        found = False
+        for j in range(min(len(a), len(b))):
+            if a[j] != b[j]:
+                after[a[j]][b[j]] = True
+                found = True
+                break
+        if not found and len(a) > len(b):
+            return ""
+    waiting = {ch: 0 for ch in after}
+    for ch in after:
+        for nxt in after[ch]:
+            waiting[nxt] += 1
+    order = []
+    ready = [ch for ch in after if waiting[ch] == 0]
+    while ready:
+        #> Nothing precedes this letter any more, so it can be placed now.
+        ch = ready.pop(0)
+        order.append(ch)
+        for nxt in after[ch]:
+            waiting[nxt] -= 1
+            if waiting[nxt] == 0:
+                ready.append(nxt)
+    if len(order) != len(after):
+        #> Some letter never reached zero, so it sat in a cycle.
+        return ""
+    return "".join(order)
+
+
 APPROACHES = [
+    {"id": "kahn", "label": "Peel off unblocked letters", "fn": kahn,
+     "complexity": {"time": "O(V + E)", "space": "O(V + E)"},
+     "viz": {"after": "graph", "waiting": "labels:after", "order": "queue", "ready": "queue"}},
     {"id": "topo", "label": "Order from adjacent pairs", "fn": topological,
      "complexity": {"time": "O(total chars)", "space": "O(1)"},
      "viz": {"words": "array", "after": "map", "order": "stack", "$calls": "recursion"}},
