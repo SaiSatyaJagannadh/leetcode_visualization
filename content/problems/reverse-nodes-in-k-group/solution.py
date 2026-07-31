@@ -52,7 +52,39 @@ def group_by_group(head, k):
         group_prev = new_prev
 
 
+def collect_each_group(head, k):
+    #> Gather k nodes into a list first, then relink them backwards. The pointer
+    #> surgery becomes ordinary indexing, at the cost of holding k nodes — the
+    #> in-place version does the same job with three pointers and no storage.
+    dummy = ListNode(0)
+    dummy.next = head
+    tail = dummy
+    node = head
+    while node is not None:
+        block = []
+        probe = node
+        while probe is not None and len(block) < k:
+            block.append(probe)
+            probe = probe.next
+        if len(block) < k:
+            #> A short block is left exactly as it is, so attach it untouched.
+            tail.next = node
+            break
+        #> Relink the block in reverse: each node points at the one before it.
+        for i in range(len(block) - 1, 0, -1):
+            block[i].next = block[i - 1]
+        #> The block's old head is now its tail, and points at whatever follows.
+        block[0].next = probe
+        tail.next = block[len(block) - 1]
+        tail = block[0]
+        node = probe
+    return dummy.next
+
+
 APPROACHES = [
+    {"id": "collect", "label": "Collect k, relink backwards", "fn": collect_each_group,
+     "complexity": {"time": "O(n)", "space": "O(k)"},
+     "viz": {"head": "node", "block": "array", "dummy": "node", "tail": "node"}},
     {"id": "groups", "label": "Check ahead, then reverse", "fn": group_by_group,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"head": "node", "dummy": "node", "group_prev": "node", "kth": "node", "node": "node", "prev": "node"}},
