@@ -41,7 +41,33 @@ def long_multiplication(a, b):
     return "".join(str(d) for d in digits[start:])
 
 
+def via_integers(a, b):
+    #> Read both strings into whole numbers, multiply, print. One line of real
+    #> work — but it leans entirely on Python integers being unbounded. In a
+    #> language where they are not, the digits overflow long before the answer
+    #> is reached, and the positional method above is the only option left.
+    x = 0
+    for ch in a:
+        #> Shift left one place and drop the new digit in.
+        x = x * 10 + int(ch)
+    y = 0
+    for ch in b:
+        y = y * 10 + int(ch)
+    product = x * y
+    if product == 0:
+        return "0"
+    out = []
+    while product > 0:
+        #> Peel digits off the right, so they come out reversed.
+        out.append(str(product % 10))
+        product = product // 10
+    return "".join(out[::-1])
+
+
 APPROACHES = [
+    {"id": "via-integers", "label": "Convert, multiply, print", "fn": via_integers,
+     "complexity": {"time": "O(m + n)", "space": "O(m + n)"},
+     "viz": {"out": "array"}},
     {"id": "long", "label": "Long multiplication", "fn": long_multiplication,
      "complexity": {"time": "O(mn)", "space": "O(m + n)"},
      "viz": {"digits": "array", "i": "pointer:a", "j": "pointer:b"}},

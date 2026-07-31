@@ -34,7 +34,30 @@ def carry_backwards(digits):
     return [1] + out
 
 
+def find_the_last_non_nine(digits):
+    #> Locate rather than propagate. Adding one only ever changes the trailing
+    #> run of nines plus the digit in front of it, so find that digit first and
+    #> write the answer directly — no carry variable at all.
+    out = list(digits)
+    at = -1
+    for i in range(len(out)):
+        if out[i] != 9:
+            #> Remember the rightmost digit that can absorb the carry.
+            at = i
+    if at == -1:
+        #> Every digit is a nine, so the number gains a place.
+        return [1] + [0] * len(out)
+    out[at] += 1
+    for i in range(at + 1, len(out)):
+        #> Everything after it was a nine and rolls over to zero.
+        out[i] = 0
+    return out
+
+
 APPROACHES = [
+    {"id": "locate", "label": "Find the last non-nine", "fn": find_the_last_non_nine,
+     "complexity": {"time": "O(n)", "space": "O(1)"},
+     "viz": {"digits": "array", "out": "array", "at": "pointer:out", "i": "pointer:out"}},
     {"id": "carry", "label": "Carry from the right", "fn": carry_backwards,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"digits": "array", "out": "array", "i": "pointer:out"}},

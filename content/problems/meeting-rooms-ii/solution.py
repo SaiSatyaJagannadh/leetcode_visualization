@@ -42,7 +42,27 @@ def sweep_events(intervals):
     return best
 
 
+def busiest_moment(intervals):
+    #> The peak can only happen when a meeting starts — nothing gets busier in
+    #> the middle of one. So check each start time and count what is running.
+    best = 0
+    for a in intervals:
+        moment = a[0]
+        running = 0
+        for b in intervals:
+            #> Running at this instant: already begun, not yet finished. A
+            #> meeting ending exactly now has released its room.
+            if b[0] <= moment and moment < b[1]:
+                running += 1
+        if running > best:
+            best = running
+    return best
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Count at every start", "fn": busiest_moment,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"intervals": "intervals"}},
     {"id": "sweep", "label": "Sweep starts against ends", "fn": sweep_events,
      "complexity": {"time": "O(n log n)", "space": "O(n)"},
      "viz": {"intervals": "intervals", "starts": "array", "ends": "array", "i": "pointer:starts", "j": "pointer:ends"}},
