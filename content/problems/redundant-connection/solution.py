@@ -43,7 +43,45 @@ def _find(parent, x):
     return x
 
 
+def rebuild_and_walk(edges):
+    #> No union-find: add edges one at a time and, before each, ask whether the
+    #> two endpoints can already reach each other. The first time they can, that
+    #> edge closes the cycle. Same answer, a whole traversal per edge.
+    adj = {}
+    for edge in edges:
+        for node in edge:
+            if str(node) not in adj:
+                adj[str(node)] = []
+    for edge in edges:
+        a, b = str(edge[0]), str(edge[1])
+        if _reaches(adj, a, b):
+            #> Already connected, so this edge is the redundant one.
+            return edge
+        adj[a].append(b)
+        adj[b].append(a)
+    return []
+
+
+def _reaches(adj, start, goal):
+    seen = {}
+    stack = [start]
+    while stack:
+        cur = stack.pop()
+        if cur == goal:
+            return True
+        if cur in seen:
+            continue
+        seen[cur] = True
+        for other in adj[cur]:
+            stack.append(other)
+    #> Ran out of places to go without arriving.
+    return False
+
+
 APPROACHES = [
+    {"id": "walk", "label": "Walk before adding each edge", "fn": rebuild_and_walk,
+     "complexity": {"time": "O(E\u00b2)", "space": "O(V + E)"},
+     "viz": {"adj": "graph", "seen": "marked:adj", "stack": "stack"}},
     {"id": "union-find", "label": "Union-find", "fn": union_find,
      "complexity": {"time": "O(E · α(V))", "space": "O(V)"},
      "viz": {"edges": "array", "parent": "map"}},

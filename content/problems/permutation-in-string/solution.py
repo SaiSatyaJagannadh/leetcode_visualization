@@ -44,7 +44,26 @@ def fixed_window(s1, s2):
     return False
 
 
+def sort_each_window(s1, s2):
+    #> The definition, taken literally: every window of the right length, sorted
+    #> and compared. Sorting throws away the fact that consecutive windows differ
+    #> by only two characters — which is the whole saving the slide makes.
+    if len(s1) > len(s2):
+        return False
+    want = sorted(s1)
+    for i in range(len(s2) - len(s1) + 1):
+        piece = s2[i:i + len(s1)]
+        #> Two strings are rearrangements of each other exactly when their
+        #> sorted forms match.
+        if sorted(piece) == want:
+            return True
+    return False
+
+
 APPROACHES = [
+    {"id": "sort-windows", "label": "Sort every window", "fn": sort_each_window,
+     "complexity": {"time": "O(n \u00b7 k log k)", "space": "O(k)"},
+     "viz": {"s2": "array", "i": "pointer:s2"}},
     {"id": "fixed-window", "label": "Fixed-width window", "fn": fixed_window,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"s2": "array", "i": "pointer:s2", "need": "map", "have": "map"}},
