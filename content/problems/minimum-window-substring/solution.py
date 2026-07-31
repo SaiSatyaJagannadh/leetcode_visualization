@@ -46,7 +46,40 @@ def sliding_window(s, t):
     return best
 
 
+def every_window(s, t):
+    #> Try every start and every end, testing each substring from scratch. The
+    #> sliding window works because a valid window stays valid as it grows, and
+    #> because shrinking from the left never has to be undone — this version
+    #> knows neither, so it recounts everything each time.
+    need = {}
+    for ch in t:
+        need[ch] = need.get(ch, 0) + 1
+    best = ""
+    for lo in range(len(s)):
+        have = {}
+        for hi in range(lo, len(s)):
+            ch = s[hi]
+            have[ch] = have.get(ch, 0) + 1
+            #> Covered when every required character appears at least as often.
+            if _covers(have, need):
+                if best == "" or hi - lo + 1 < len(best):
+                    best = s[lo:hi + 1]
+                #> Growing further can only make this window longer, so stop.
+                break
+    return best
+
+
+def _covers(have, need):
+    for ch in need:
+        if have.get(ch, 0) < need[ch]:
+            return False
+    return True
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Every window, recounted", "fn": every_window,
+     "complexity": {"time": "O(n\u00b2 \u00b7 t)", "space": "O(t)"},
+     "viz": {"s": "array", "have": "map", "need": "map", "lo": "pointer:s", "hi": "pointer:s"}},
     {"id": "window", "label": "Grow then shrink", "fn": sliding_window,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"s": "array", "lo": "pointer:s", "hi": "pointer:s", "need": "map"}},

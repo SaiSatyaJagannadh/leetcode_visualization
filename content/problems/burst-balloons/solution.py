@@ -39,7 +39,41 @@ def last_one_standing(nums):
     return dp[0][n - 1]
 
 
+CACHE = {}
+
+
+def choose_the_last(nums):
+    #> The same insight read top-down: for an open range, try each balloon as the
+    #> LAST to burst there. Its neighbours are then the untouched walls, so the
+    #> two halves never interfere and can be solved independently.
+    CACHE.clear()
+    padded = [1] + list(nums) + [1]
+    return _best(padded, 0, len(padded) - 1)
+
+
+def _best(padded, lo, hi):
+    if hi - lo < 2:
+        #> Nothing strictly between the walls, so nothing to burst.
+        return 0
+    key = str(lo) + ":" + str(hi)
+    if key in CACHE:
+        return CACHE[key]
+    out = 0
+    for k in range(lo + 1, hi):
+        #> k bursts last, so it is worth walls times itself, plus whatever the
+        #> two independent halves were worth.
+        gain = padded[lo] * padded[k] * padded[hi]
+        total = _best(padded, lo, k) + gain + _best(padded, k, hi)
+        if total > out:
+            out = total
+    CACHE[key] = out
+    return out
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Pick the last to burst", "fn": choose_the_last,
+     "complexity": {"time": "O(n\u00b3)", "space": "O(n\u00b2)"},
+     "viz": {"padded": "array", "CACHE": "map", "$calls": "recursion"}},
     {"id": "last", "label": "Pick the last balloon in each range", "fn": last_one_standing,
      "complexity": {"time": "O(n³)", "space": "O(n²)"},
      "viz": {"padded": "array", "dp": "grid", "lo": "row:dp", "hi": "col:dp"}},
