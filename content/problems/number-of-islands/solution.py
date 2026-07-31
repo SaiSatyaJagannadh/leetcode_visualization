@@ -51,7 +51,37 @@ def flood(grid):
     return count
 
 
+def bfs_queue(grid):
+    rows, cols = len(grid), len(grid[0])
+    count = 0
+    for r in range(rows):
+        for c in range(cols):
+            if grid[r][c] != 1:
+                continue
+            count += 1
+            #> A queue instead of a stack. Same cells get sunk, but they are
+            #> reached in rings spreading outward rather than one long tendril
+            #> at a time — watch the highlighted cells to see the difference.
+            queue = [[r, c]]
+            grid[r][c] = 2
+            while queue:
+                cell = queue.pop(0)
+                cr, cc = cell[0], cell[1]
+                #> Mark on the way IN, not on the way out. With a queue a cell
+                #> can be enqueued twice before it is ever popped.
+                for step in [[1, 0], [-1, 0], [0, 1], [0, -1]]:
+                    nr = cr + step[0]
+                    nc = cc + step[1]
+                    if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 1:
+                        grid[nr][nc] = 2
+                        queue.append([nr, nc])
+    return count
+
+
 APPROACHES = [
+    {"id": "bfs", "label": "Flood fill with a queue", "fn": bfs_queue,
+     "complexity": {"time": "O(rc)", "space": "O(rc)"},
+     "viz": {"grid": "grid", "r": "row:grid", "c": "col:grid", "queue": "cells:grid", "cell": "array"}},
     {
         "id": "flood",
         "label": "Flood fill",

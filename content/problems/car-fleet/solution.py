@@ -37,7 +37,29 @@ def stack_from_the_front(target, position, speed):
     return len(times)
 
 
+def compare_every_pair(target, position, speed):
+    #> Work out each car's solo arrival time first.
+    times = []
+    for i in range(len(position)):
+        times.append((target - position[i]) / speed[i])
+    fleets = 0
+    for i in range(len(position)):
+        leads = True
+        for j in range(len(position)):
+            #> A car is absorbed if ANY car ahead of it arrives no sooner —
+            #> that car is slower and blocks the road.
+            if position[j] > position[i] and times[j] >= times[i]:
+                leads = False
+        if leads:
+            #> Nothing ahead holds it up, so it is the head of its own fleet.
+            fleets += 1
+    return fleets
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Compare every pair", "fn": compare_every_pair,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(n)"},
+     "viz": {"position": "array", "speed": "array", "times": "array", "i": "pointer:position", "j": "pointer:position"}},
     {"id": "stack", "label": "Stack from the front", "fn": stack_from_the_front,
      "complexity": {"time": "O(n log n)", "space": "O(n)"},
      "viz": {"position": "array", "speed": "array", "times": "stack", "cars": "array"}},

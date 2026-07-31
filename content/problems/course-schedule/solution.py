@@ -51,7 +51,34 @@ def _visit(adj, course, state):
     return True
 
 
+def peel_off_ready(adj):
+    #> The other way to prove there is no cycle: keep removing courses that have
+    #> nothing left to wait for. If every course eventually becomes takeable,
+    #> nothing was ever stuck waiting on itself.
+    waiting = {str(k): [str(x) for x in adj[k]] for k in adj}
+    taken = 0
+    moved = True
+    while moved:
+        moved = False
+        for key in waiting:
+            #> A course with an empty prerequisite list can be taken right now.
+            if waiting[key] is not None and len(waiting[key]) == 0:
+                waiting[key] = None
+                taken += 1
+                moved = True
+                #> Taking it clears it from everyone still waiting on it.
+                for other in waiting:
+                    if waiting[other] is not None and key in waiting[other]:
+                        waiting[other] = [x for x in waiting[other] if x != key]
+    #> Anything left is part of a cycle: it is waiting on something that is
+    #> itself, directly or indirectly, waiting on it.
+    return taken == len(waiting)
+
+
 APPROACHES = [
+    {"id": "peel", "label": "Peel off what is ready", "fn": peel_off_ready,
+     "complexity": {"time": "O(V\u00b2 + VE)", "space": "O(V + E)"},
+     "viz": {"adj": "graph", "waiting": "labels:adj"}},
     {"id": "dfs", "label": "DFS with three colours", "fn": detect_cycle,
      "complexity": {"time": "O(V + E)", "space": "O(V)"},
      "viz": {"adj": "graph", "state": "labels:adj", "$calls": "recursion"}},

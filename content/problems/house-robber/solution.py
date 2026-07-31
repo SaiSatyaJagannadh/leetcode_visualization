@@ -33,7 +33,27 @@ def rolling(nums):
     return max(take, skip)
 
 
+def table(nums):
+    #> best[i] is the most money obtainable from the first i houses. Writing the
+    #> whole table down first makes the recurrence visible; the rolling version
+    #> is this same table with everything older than two slots thrown away.
+    best = [0] * (len(nums) + 1)
+    best[1] = nums[0]
+    for i in range(2, len(nums) + 1):
+        #> Rob this house and add what was safe two back, or skip it and keep
+        #> the previous total. Whichever is larger.
+        rob = best[i - 2] + nums[i - 1]
+        if rob > best[i - 1]:
+            best[i] = rob
+        else:
+            best[i] = best[i - 1]
+    return best[len(nums)]
+
+
 APPROACHES = [
+    {"id": "table", "label": "Full DP table", "fn": table,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"nums": "array", "best": "array", "i": "pointer:best"}},
     {"id": "rolling", "label": "Two rolling totals", "fn": rolling,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"nums": "array"}},
