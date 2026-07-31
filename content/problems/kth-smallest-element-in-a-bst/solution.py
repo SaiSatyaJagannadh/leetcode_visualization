@@ -43,7 +43,33 @@ def inorder_walk(root, k):
     return None
 
 
+ORDER = []
+
+
+def flatten_then_index(root, k):
+    #> Ignore that it is a BST: collect every value, sort, take the kth. Correct
+    #> for any tree, but it visits all n nodes when the in-order walk stops after
+    #> k — and it sorts values that were already in order.
+    ORDER.clear()
+    _collect(root)
+    ordered = sorted(ORDER)
+    if k > len(ordered):
+        return None
+    return ordered[k - 1]
+
+
+def _collect(node):
+    if node is None:
+        return
+    ORDER.append(node.val)
+    _collect(node.left)
+    _collect(node.right)
+
+
 APPROACHES = [
+    {"id": "flatten", "label": "Collect everything, then sort", "fn": flatten_then_index,
+     "complexity": {"time": "O(n log n)", "space": "O(n)"},
+     "viz": {"root": "node", "ORDER": "array", "ordered": "array", "$calls": "recursion"}},
     {"id": "inorder", "label": "In-order until k", "fn": inorder_walk,
      "complexity": {"time": "O(h + k)", "space": "O(h)"},
      "viz": {"root": "node", "node": "node", "stack": "stack"}},

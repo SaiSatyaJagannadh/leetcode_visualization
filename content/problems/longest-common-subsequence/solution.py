@@ -34,7 +34,37 @@ def table(a, b):
     return dp[len(a)][len(b)]
 
 
+MEMO = {}
+
+
+def top_down(a, b):
+    #> The same recurrence asked from the front. Only the cells these two strings
+    #> actually reach get computed, which for very different strings is far fewer
+    #> than the full grid.
+    MEMO.clear()
+    return _lcs(a, b, 0, 0)
+
+
+def _lcs(a, b, i, j):
+    if i == len(a) or j == len(b):
+        #> One string is exhausted, so nothing more can be shared.
+        return 0
+    key = str(i) + ":" + str(j)
+    if key in MEMO:
+        return MEMO[key]
+    if a[i] == b[j]:
+        #> A match is always worth taking; no better choice exists at this pair.
+        MEMO[key] = 1 + _lcs(a, b, i + 1, j + 1)
+    else:
+        #> Otherwise drop one character from one side and keep the better branch.
+        MEMO[key] = max(_lcs(a, b, i + 1, j), _lcs(a, b, i, j + 1))
+    return MEMO[key]
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Only the cells needed", "fn": top_down,
+     "complexity": {"time": "O(mn)", "space": "O(mn)"},
+     "viz": {"a": "array", "b": "array", "MEMO": "map", "$calls": "recursion"}},
     {"id": "table", "label": "Fill the grid", "fn": table,
      "complexity": {"time": "O(mn)", "space": "O(mn)"},
      "viz": {"dp": "grid", "i": "row:dp", "j": "col:dp", "a": "array", "b": "array"}},

@@ -40,7 +40,40 @@ def walk_down(root, p, q):
     return None
 
 
+def paths_from_root(root, p, q):
+    #> Works on any binary tree, not just a BST: record the route to each target,
+    #> then compare. The BST walk needs neither list because the ordering tells
+    #> it which way to go without ever searching.
+    a = []
+    b = []
+    _path(root, p, a)
+    _path(root, q, b)
+    last = None
+    for i in range(min(len(a), len(b))):
+        if a[i] != b[i]:
+            #> The routes have diverged, so the previous shared node is the answer.
+            break
+        last = a[i]
+    return last
+
+
+def _path(node, target, out):
+    if node is None:
+        return False
+    out.append(node.val)
+    if node.val == target:
+        return True
+    if _path(node.left, target, out) or _path(node.right, target, out):
+        return True
+    #> Dead end, so this node is not on the route after all.
+    out.pop()
+    return False
+
+
 APPROACHES = [
+    {"id": "paths", "label": "Compare the two routes", "fn": paths_from_root,
+     "complexity": {"time": "O(n)", "space": "O(h)"},
+     "viz": {"root": "node", "a": "queue", "b": "queue", "$calls": "recursion"}},
     {"id": "walk", "label": "Walk down until they split", "fn": walk_down,
      "complexity": {"time": "O(h)", "space": "O(1)"},
      "viz": {"root": "node", "node": "node"}},

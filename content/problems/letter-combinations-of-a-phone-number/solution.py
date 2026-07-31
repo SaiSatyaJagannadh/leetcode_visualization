@@ -38,7 +38,28 @@ def backtrack(digits, i=0, current="", out=None):
     return out
 
 
+def grow_iteratively(digits):
+    #> No recursion: hold every combination built so far and extend all of them
+    #> by one digit's letters. The list IS the frontier the recursion keeps on
+    #> its call stack, made visible.
+    if digits == "":
+        return []
+    out = [""]
+    for i in range(len(digits)):
+        nxt = []
+        for partial in out:
+            for ch in KEYS[digits[i]]:
+                #> Every existing combination gains every letter on this key,
+                #> so the list multiplies in size rather than growing by one.
+                nxt.append(partial + ch)
+        out = nxt
+    return out
+
+
 APPROACHES = [
+    {"id": "iterative", "label": "Extend every combination", "fn": grow_iteratively,
+     "complexity": {"time": "O(4\u207f)", "space": "O(4\u207f)"},
+     "viz": {"out": "queue", "nxt": "queue"}},
     {"id": "backtrack", "label": "One level per digit", "fn": backtrack,
      "complexity": {"time": "O(4ⁿ)", "space": "O(n)"},
      "viz": {"out": "queue", "$calls": "recursion"}},
