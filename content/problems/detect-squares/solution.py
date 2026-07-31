@@ -44,7 +44,33 @@ def count_squares(points, query):
     return total
 
 
+def try_every_pair(points, query):
+    #> No counting map: look at every stored point as a possible diagonal partner
+    #> and, for each, scan the whole list again for the two remaining corners.
+    qx, qy = query[0], query[1]
+    total = 0
+    for p in points:
+        px, py = p[0], p[1]
+        #> Same diagonal test — equal distance in both axes, and not a
+        #> degenerate zero-width square.
+        if abs(px - qx) != abs(py - qy) or px == qx:
+            continue
+        c1 = 0
+        c2 = 0
+        for other in points:
+            #> Duplicates matter, so count occurrences rather than existence.
+            if other[0] == px and other[1] == qy:
+                c1 += 1
+            if other[0] == qx and other[1] == py:
+                c2 += 1
+        total += c1 * c2
+    return total
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Scan for every corner", "fn": try_every_pair,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"points": "array", "query": "array"}},
     {"id": "diagonal", "label": "Anchor on the opposite corner", "fn": count_squares,
      "complexity": {"time": "O(n) per query", "space": "O(n)"},
      "viz": {"counts": "map", "points": "array"}},

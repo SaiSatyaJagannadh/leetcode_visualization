@@ -40,7 +40,36 @@ def bellman_ford(n, flights, src, dst, k):
     return -1 if cost[dst] == BIG else cost[dst]
 
 
+def layer_by_layer(n, flights, src, dst, k):
+    #> Same idea told forwards: keep only the cities reachable in exactly h hops
+    #> and their best price, then take one more hop from each. Because a layer is
+    #> built solely from the previous one, the stop limit cannot be exceeded —
+    #> the same guarantee the snapshot gives Bellman-Ford, made structural.
+    best = [BIG] * n
+    best[src] = 0
+    layer = {str(src): 0}
+    for _ in range(k + 1):
+        nxt = {}
+        for key in layer:
+            a = int(key)
+            for f in flights:
+                if f[0] != a:
+                    continue
+                b = f[1]
+                price = layer[key] + f[2]
+                #> Only worth carrying forward if it beats what we already have.
+                if price < best[b]:
+                    best[b] = price
+                if str(b) not in nxt or price < nxt[str(b)]:
+                    nxt[str(b)] = price
+        layer = nxt
+    return -1 if best[dst] == BIG else best[dst]
+
+
 APPROACHES = [
+    {"id": "layers", "label": "One layer of hops at a time", "fn": layer_by_layer,
+     "complexity": {"time": "O(k \u00b7 E)", "space": "O(n)"},
+     "viz": {"best": "array", "layer": "map", "nxt": "map", "flights": "array"}},
     {"id": "bellman-ford", "label": "One relaxation round per hop", "fn": bellman_ford,
      "complexity": {"time": "O(k · E)", "space": "O(n)"},
      "viz": {"cost": "array", "snapshot": "array", "flights": "array"}},

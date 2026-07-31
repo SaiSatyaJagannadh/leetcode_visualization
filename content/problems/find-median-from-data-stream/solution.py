@@ -68,7 +68,32 @@ def _pop(heap):
     return top
 
 
+def keep_sorted(stream):
+    #> The obvious way: hold every value in order and read the middle out. Adding
+    #> to a sorted list costs O(n) because everything after the insertion point
+    #> shifts — that shifting is exactly what the two heaps avoid.
+    ordered = []
+    out = []
+    for v in stream:
+        #> Walk to the first value larger than this one.
+        i = 0
+        while i < len(ordered) and ordered[i] < v:
+            i += 1
+        ordered.insert(i, v)
+        mid = len(ordered) // 2
+        if len(ordered) % 2 == 1:
+            #> Odd count, so one value sits exactly in the middle.
+            out.append(ordered[mid] * 1.0)
+        else:
+            #> Even count, so the median is between the two middle values.
+            out.append((ordered[mid - 1] + ordered[mid]) / 2.0)
+    return out
+
+
 APPROACHES = [
+    {"id": "sorted-list", "label": "Keep a sorted list", "fn": keep_sorted,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(n)"},
+     "viz": {"stream": "array", "ordered": "array", "out": "queue", "i": "pointer:ordered"}},
     {"id": "two-heaps", "label": "Two heaps facing each other", "fn": two_heaps,
      "complexity": {"time": "O(log n) per add", "space": "O(n)"},
      "viz": {"low": "heap", "high": "heap", "out": "queue", "stream": "array"}},
