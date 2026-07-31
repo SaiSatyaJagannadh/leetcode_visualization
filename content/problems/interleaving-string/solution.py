@@ -37,7 +37,40 @@ def table(a, b, c):
     return dp[len(a)][len(b)]
 
 
+MEMO = {}
+
+
+def top_down(a, b, c):
+    #> The same question asked forwards: standing at (i, j), can the rest of c be
+    #> built? Only the cells actually reachable get computed, and the failure in
+    #> the length check short-circuits before any of them do.
+    if len(a) + len(b) != len(c):
+        return False
+    MEMO.clear()
+    return _can(a, b, c, 0, 0)
+
+
+def _can(a, b, c, i, j):
+    if i == len(a) and j == len(b):
+        #> Both sources spent, so all of c was accounted for.
+        return True
+    key = str(i) + ":" + str(j)
+    if key in MEMO:
+        return MEMO[key]
+    out = False
+    #> The position in c is i + j — it never needs its own index.
+    if i < len(a) and a[i] == c[i + j] and _can(a, b, c, i + 1, j):
+        out = True
+    if not out and j < len(b) and b[j] == c[i + j] and _can(a, b, c, i, j + 1):
+        out = True
+    MEMO[key] = out
+    return out
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Can the rest be built?", "fn": top_down,
+     "complexity": {"time": "O(mn)", "space": "O(mn)"},
+     "viz": {"MEMO": "map", "$calls": "recursion"}},
     {"id": "table", "label": "Fill the grid", "fn": table,
      "complexity": {"time": "O(mn)", "space": "O(mn)"},
      "viz": {"dp": "grid", "i": "row:dp", "j": "col:dp"}},

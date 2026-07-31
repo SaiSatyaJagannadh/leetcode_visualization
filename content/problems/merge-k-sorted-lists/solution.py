@@ -57,7 +57,23 @@ def _merge(a, b):
     return dummy.next
 
 
+def one_at_a_time(lists):
+    #> Fold the lists into an accumulator, left to right. Correct, and the reason
+    #> pairing exists: the accumulator grows every round, so early nodes get
+    #> re-walked once per remaining list instead of once per halving.
+    if not lists:
+        return None
+    out = lists[0]
+    for i in range(1, len(lists)):
+        #> Each merge walks the whole accumulated result again.
+        out = _merge(out, lists[i])
+    return out
+
+
 APPROACHES = [
+    {"id": "sequential", "label": "Fold one list at a time", "fn": one_at_a_time,
+     "complexity": {"time": "O(k\u00b7n)", "space": "O(1)"},
+     "viz": {"lists": "array", "out": "node"}},
     {"id": "pairwise", "label": "Merge in pairs", "fn": pairwise,
      "complexity": {"time": "O(N log k)", "space": "O(1)"},
      "viz": {"queue": "array", "nxt": "array"}},
