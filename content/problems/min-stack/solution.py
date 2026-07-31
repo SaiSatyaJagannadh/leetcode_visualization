@@ -42,7 +42,33 @@ def paired_stack(ops):
     return log
 
 
+def rescan_for_min(ops):
+    #> The obvious version: keep one stack and, whenever the minimum is asked
+    #> for, walk the whole thing. Correct, but getMin becomes O(n) — and the
+    #> paired stack exists precisely to make that walk unnecessary.
+    stack = []
+    log = []
+    for op in ops:
+        if op == "pop":
+            stack.pop()
+        else:
+            stack.append(op)
+        if stack:
+            #> Scan every level, every time. Nothing is remembered between calls.
+            smallest = stack[0]
+            for v in stack:
+                if v < smallest:
+                    smallest = v
+            log.append(smallest)
+        else:
+            log.append(None)
+    return log
+
+
 APPROACHES = [
+    {"id": "rescan", "label": "Scan the stack each time", "fn": rescan_for_min,
+     "complexity": {"time": "O(n) per query", "space": "O(n)"},
+     "viz": {"stack": "stack", "log": "queue"}},
     {"id": "paired", "label": "Parallel minimum stack", "fn": paired_stack,
      "complexity": {"time": "O(1) per op", "space": "O(n)"},
      "viz": {"stack": "stack", "mins": "stack", "log": "queue", "ops": "array"}},
