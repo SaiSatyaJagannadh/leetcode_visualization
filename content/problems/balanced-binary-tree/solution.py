@@ -42,7 +42,32 @@ def _check(node):
     return 1 + max(left, right)
 
 
+def check_every_node(root):
+    #> Take the definition literally: every node must have balanced sides.
+    return _balanced(root)
+
+
+def _balanced(node):
+    if node is None:
+        return True
+    #> Both heights measured from scratch here, then measured again for each
+    #> child below. That repetition is exactly what the -1 poison value avoids.
+    if abs(_depth(node.left) - _depth(node.right)) > 1:
+        return False
+    #> A node can be balanced while something beneath it is not, so keep going.
+    return _balanced(node.left) and _balanced(node.right)
+
+
+def _depth(node):
+    if node is None:
+        return 0
+    return 1 + max(_depth(node.left), _depth(node.right))
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Re-measure both sides everywhere", "fn": check_every_node,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(h)"},
+     "viz": {"root": "node", "$calls": "recursion"}},
     {"id": "poison", "label": "Height, or -1 for failed", "fn": height_or_fail,
      "complexity": {"time": "O(n)", "space": "O(h)"},
      "viz": {"root": "node", "$calls": "recursion"}},

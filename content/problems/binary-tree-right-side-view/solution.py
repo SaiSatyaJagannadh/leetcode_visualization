@@ -40,7 +40,32 @@ def rightmost_per_level(root):
     return out
 
 
+SEEN = []
+
+
+def right_first_dfs(root):
+    #> Go right before left. The first node reached at any depth is therefore
+    #> the rightmost one, so nothing needs to be compared or overwritten.
+    SEEN.clear()
+    _look(root, 0)
+    return [v for v in SEEN]
+
+
+def _look(node, depth):
+    if node is None:
+        return
+    if depth == len(SEEN):
+        #> Nothing recorded this deep yet, so this is the visible node.
+        SEEN.append(node.val)
+    _look(node.right, depth + 1)
+    #> The left subtree can still reach depths the right one never did.
+    _look(node.left, depth + 1)
+
+
 APPROACHES = [
+    {"id": "dfs-right-first", "label": "Depth-first, right side first", "fn": right_first_dfs,
+     "complexity": {"time": "O(n)", "space": "O(h)"},
+     "viz": {"root": "node", "SEEN": "queue", "$calls": "recursion"}},
     {"id": "levels", "label": "Last node of each level", "fn": rightmost_per_level,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"root": "node", "level": "queue", "nxt": "queue", "out": "queue", "node": "node"}},

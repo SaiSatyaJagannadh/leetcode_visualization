@@ -42,7 +42,40 @@ def length_prefix(strs):
     return out
 
 
+def escaped_separator(strs):
+    #> The other way round: keep a separator, but make it impossible for a
+    #> payload to contain one. Every literal # becomes ##, so a single # can
+    #> only ever mean "boundary".
+    parts = []
+    for s in strs:
+        parts.append(s.replace("#", "##"))
+    encoded = "#;".join(parts)
+
+    out = []
+    cur = ""
+    i = 0
+    while i < len(encoded):
+        if encoded[i] == "#" and i + 1 < len(encoded) and encoded[i + 1] == "#":
+            #> A doubled # is one real # of payload.
+            cur += "#"
+            i += 2
+        elif encoded[i] == "#" and i + 1 < len(encoded) and encoded[i + 1] == ";":
+            #> A lone # followed by ; is the boundary we reserved.
+            out.append(cur)
+            cur = ""
+            i += 2
+        else:
+            cur += encoded[i]
+            i += 1
+    #> The final chunk has no trailing separator, so it is flushed here.
+    out.append(cur)
+    return out
+
+
 APPROACHES = [
+    {"id": "escaped", "label": "Escaped separator", "fn": escaped_separator,
+     "complexity": {"time": "O(total chars)", "space": "O(total chars)"},
+     "viz": {"strs": "array", "parts": "queue", "out": "queue"}},
     {"id": "length-prefix", "label": "Length-prefixed chunks", "fn": length_prefix,
      "complexity": {"time": "O(total chars)", "space": "O(total chars)"},
      "viz": {"strs": "array", "parts": "queue", "out": "queue"}},
