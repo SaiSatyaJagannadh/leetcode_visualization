@@ -54,7 +54,41 @@ def _walk(board, r, c, word, i):
     return found
 
 
+def with_a_visited_set(board, word):
+    #> Same search, but the visited cells live in their own set instead of being
+    #> blanked in the board. Nothing has to be restored on the way out, at the
+    #> cost of carrying a second structure through every frame.
+    for r in range(len(board)):
+        for c in range(len(board[0])):
+            if _step(board, r, c, word, 0, {}):
+                return True
+    return False
+
+
+def _step(board, r, c, word, i, seen):
+    if i == len(word):
+        return True
+    if r < 0 or r >= len(board) or c < 0 or c >= len(board[0]):
+        return False
+    key = str(r) + "," + str(c)
+    if key in seen or board[r][c] != word[i]:
+        #> Already on this path, or simply the wrong letter.
+        return False
+    seen[key] = True
+    found = (_step(board, r + 1, c, word, i + 1, seen)
+             or _step(board, r - 1, c, word, i + 1, seen)
+             or _step(board, r, c + 1, word, i + 1, seen)
+             or _step(board, r, c - 1, word, i + 1, seen))
+    #> Leaving this cell frees it for a different route, exactly as un-blanking
+    #> the board does — the bookkeeping just lives somewhere else.
+    del seen[key]
+    return found
+
+
 APPROACHES = [
+    {"id": "visited-set", "label": "Keep visited in a set", "fn": with_a_visited_set,
+     "complexity": {"time": "O(rc \u00b7 4^L)", "space": "O(L)"},
+     "viz": {"board": "grid", "seen": "cells:board", "$calls": "recursion"}},
     {"id": "backtrack", "label": "Backtracking on the grid", "fn": search,
      "complexity": {"time": "O(rc · 4^L)", "space": "O(L)"},
      "viz": {"board": "grid", "$calls": "recursion"}},

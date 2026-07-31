@@ -61,7 +61,40 @@ def dijkstra(adj, start):
     return slowest
 
 
+def bellman_ford(adj, start):
+    #> No "settle the nearest" step at all: relax every edge, repeatedly, until a
+    #> full pass changes nothing. Slower, but it needs no ordering argument —
+    #> and unlike Dijkstra it would still work with negative weights.
+    dist = {str(k): INF for k in adj}
+    dist[str(start)] = 0
+    changed = True
+    while changed:
+        changed = False
+        for node in adj:
+            here = dist[str(node)]
+            if here == INF:
+                #> Not reachable yet, so it cannot offer a route to anyone.
+                continue
+            for edge in adj[node]:
+                to, w = str(edge[0]), edge[1]
+                #> Arriving via this node beats whatever we had recorded.
+                if dist[to] == INF or here + w < dist[to]:
+                    dist[to] = here + w
+                    changed = True
+    #> The answer is the last arrival, and only if every node got one.
+    worst = 0
+    for k in dist:
+        if dist[k] == INF:
+            return -1
+        if dist[k] > worst:
+            worst = dist[k]
+    return worst
+
+
 APPROACHES = [
+    {"id": "bellman-ford", "label": "Relax every edge until stable", "fn": bellman_ford,
+     "complexity": {"time": "O(V \u00b7 E)", "space": "O(V)"},
+     "viz": {"adj": "graph", "dist": "labels:adj"}},
     {
         "id": "dijkstra",
         "label": "Dijkstra",
