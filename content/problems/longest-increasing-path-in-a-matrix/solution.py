@@ -48,7 +48,37 @@ def _walk(matrix, r, c, memo):
     return longest
 
 
+def sort_and_sweep(matrix):
+    #> No recursion and no memo table. Visit the cells from lowest value to
+    #> highest: by the time a cell is reached, every smaller neighbour that
+    #> could feed into it has already been finalised. The strictly-increasing
+    #> rule is what makes the sorted order a valid processing order.
+    rows, cols = len(matrix), len(matrix[0])
+    order = []
+    for r in range(rows):
+        for c in range(cols):
+            order.append([matrix[r][c], r, c])
+    order = sorted(order, key=lambda e: e[0])
+    length = [[1] * cols for _ in range(rows)]
+    best = 0
+    for entry in order:
+        v, r, c = entry[0], entry[1], entry[2]
+        for d in ([1, 0], [-1, 0], [0, 1], [0, -1]):
+            nr, nc = r + d[0], c + d[1]
+            if 0 <= nr < rows and 0 <= nc < cols and matrix[nr][nc] < v:
+                #> A smaller neighbour is already final, so extending its path
+                #> by this cell is safe to record now.
+                if length[nr][nc] + 1 > length[r][c]:
+                    length[r][c] = length[nr][nc] + 1
+        if length[r][c] > best:
+            best = length[r][c]
+    return best
+
+
 APPROACHES = [
+    {"id": "sorted-sweep", "label": "Visit cells lowest first", "fn": sort_and_sweep,
+     "complexity": {"time": "O(rc log rc)", "space": "O(rc)"},
+     "viz": {"matrix": "grid", "length": "grid", "order": "array"}},
     {"id": "memo", "label": "DFS with memoisation", "fn": memoised,
      "complexity": {"time": "O(rc)", "space": "O(rc)"},
      "viz": {"matrix": "grid", "memo": "grid", "$calls": "recursion"}},

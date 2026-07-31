@@ -60,7 +60,54 @@ def timeline(ops):
     return out
 
 
+def merge_heads(ops):
+    #> Never build the full list. Keep a cursor into each followed timeline and
+    #> repeatedly take whichever head is newest — ten times, then stop. Sorting
+    #> every post to keep ten of them is the work this avoids.
+    clock = [0]
+    posts = {}
+    follows = {}
+    out = []
+    for op in ops:
+        kind, user, arg = op[0], op[1], op[2]
+        if kind == "post":
+            clock[0] += 1
+            posts.setdefault(user, []).insert(0, [clock[0], arg])
+        elif kind == "follow":
+            follows.setdefault(user, {})[arg] = True
+        elif kind == "unfollow":
+            if user in follows and arg in follows[user]:
+                del follows[user][arg]
+        else:
+            sources = [user]
+            for other in follows.get(user, {}):
+                sources.append(other)
+            #> One cursor per source, all starting at that source's newest post.
+            at = {}
+            for s in sources:
+                at[s] = 0
+            feed = []
+            while len(feed) < FEED_SIZE:
+                #> Pick the newest head across every cursor.
+                pick = None
+                for s in sources:
+                    row = posts.get(s, [])
+                    if at[s] < len(row):
+                        if pick is None or row[at[s]][0] > posts[pick][at[pick]][0]:
+                            pick = s
+                if pick is None:
+                    #> Every timeline is exhausted, so the feed is short.
+                    break
+                feed.append(posts[pick][at[pick]][1])
+                at[pick] += 1
+            out.append(feed)
+    return out
+
+
 APPROACHES = [
+    {"id": "merge-heads", "label": "Merge the timeline heads", "fn": merge_heads,
+     "complexity": {"time": "O(feed \u00b7 sources)", "space": "O(sources)"},
+     "viz": {"posts": "map", "follows": "map", "at": "map", "feed": "queue"}},
     {"id": "merge", "label": "Merge timelines by timestamp", "fn": timeline,
      "complexity": {"time": "O(f log f) per feed", "space": "O(posts)"},
      "viz": {"posts": "map", "follows": "map", "out": "queue", "merged": "array"}},
