@@ -39,7 +39,33 @@ def seen_set(n):
     return True
 
 
+def floyd_cycle(n):
+    #> The sequence is a linked list in disguise: each value points at exactly
+    #> one successor. So the tortoise-and-hare trick works, and it needs no
+    #> memory at all — the set version's whole cost disappears.
+    slow = n
+    fast = _square_digits(n)
+    while fast != 1 and slow != fast:
+        #> One step for slow, two for fast. If there is a loop the fast pointer
+        #> laps the slow one; if there is not, fast reaches 1 first.
+        slow = _square_digits(slow)
+        fast = _square_digits(_square_digits(fast))
+    return fast == 1
+
+
+def _square_digits(x):
+    total = 0
+    while x > 0:
+        digit = x % 10
+        total += digit * digit
+        x = x // 10
+    return total
+
+
 APPROACHES = [
+    {"id": "floyd", "label": "Tortoise and hare", "fn": floyd_cycle,
+     "complexity": {"time": "O(log n)", "space": "O(1)"},
+     "viz": {"$calls": "recursion"}},
     {"id": "seen", "label": "Detect the repeat", "fn": seen_set,
      "complexity": {"time": "O(log n)", "space": "O(log n)"},
      "viz": {"seen": "map"}},

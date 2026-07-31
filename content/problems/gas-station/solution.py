@@ -37,7 +37,30 @@ def single_pass(gas, cost):
     return start if total >= 0 else -1
 
 
+def try_every_start(gas, cost):
+    #> The obvious version: actually attempt the circuit from each station.
+    for start in range(len(gas)):
+        tank = 0
+        made_it = True
+        for step in range(len(gas)):
+            #> Wrap around, because the circuit is a loop.
+            i = (start + step) % len(gas)
+            tank += gas[i] - cost[i]
+            if tank < 0:
+                #> Ran dry, so this start fails. The single-pass version knows
+                #> that every station from `start` up to i fails too; this one
+                #> has to rediscover that by trying each of them.
+                made_it = False
+                break
+        if made_it:
+            return start
+    return -1
+
+
 APPROACHES = [
+    {"id": "brute-force", "label": "Attempt every start", "fn": try_every_start,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"gas": "array", "cost": "array", "start": "pointer:gas", "i": "pointer:gas"}},
     {"id": "single-pass", "label": "Restart where the tank empties", "fn": single_pass,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"gas": "array", "cost": "array", "i": "pointer:gas", "start": "pointer:gas"}},

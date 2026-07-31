@@ -32,7 +32,23 @@ def furthest_reach(nums):
     return True
 
 
+def work_backwards(nums):
+    #> Ask the question from the other end: which index is the leftmost one still
+    #> known to reach the finish? Start with the finish itself.
+    target = len(nums) - 1
+    for i in range(len(nums) - 2, -1, -1):
+        #> If this index can reach the current target, it becomes the new target
+        #> — everything to its left now only has to reach here.
+        if i + nums[i] >= target:
+            target = i
+    #> Solvable exactly when the target has collapsed all the way back to 0.
+    return target == 0
+
+
 APPROACHES = [
+    {"id": "backwards", "label": "Collapse the target backwards", "fn": work_backwards,
+     "complexity": {"time": "O(n)", "space": "O(1)"},
+     "viz": {"nums": "array", "i": "pointer:nums", "target": "pointer:nums"}},
     {"id": "reach", "label": "Track the furthest reach", "fn": furthest_reach,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"nums": "array", "i": "pointer:nums", "reach": "pointer:nums"}},

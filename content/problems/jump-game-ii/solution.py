@@ -35,7 +35,27 @@ def level_by_level(nums):
     return jumps
 
 
+BIG = 10 ** 9
+
+
+def dp_table(nums):
+    #> best[i] is the fewest jumps to reach i. Slower, but it shows the answer
+    #> for every position rather than only the last one.
+    best = [BIG] * len(nums)
+    best[0] = 0
+    for i in range(len(nums)):
+        for step in range(1, nums[i] + 1):
+            j = i + step
+            #> Reaching j via i costs one more jump than reaching i did.
+            if j < len(nums) and best[i] + 1 < best[j]:
+                best[j] = best[i] + 1
+    return best[len(nums) - 1]
+
+
 APPROACHES = [
+    {"id": "table", "label": "Fewest jumps to every index", "fn": dp_table,
+     "complexity": {"time": "O(n\u00b7max)", "space": "O(n)"},
+     "viz": {"nums": "array", "best": "array", "i": "pointer:nums", "j": "pointer:best"}},
     {"id": "levels", "label": "One jump per level", "fn": level_by_level,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"nums": "array", "i": "pointer:nums", "edge": "pointer:nums", "furthest": "pointer:nums"}},
