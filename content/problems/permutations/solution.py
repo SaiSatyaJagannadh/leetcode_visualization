@@ -41,7 +41,28 @@ def backtrack(nums, current=None, used=None, out=None):
     return out
 
 
+def insert_everywhere(nums):
+    #> Build them iteratively: take every permutation of the first k values and
+    #> slot the next value into every gap. No used-set and no undo, because
+    #> nothing is ever mutated in place — each result is a fresh list.
+    out = [[]]
+    for n in nums:
+        nxt = []
+        for perm in out:
+            for pos in range(len(perm) + 1):
+                #> Every gap, including before the first and after the last, is
+                #> a distinct placement — which is why the count multiplies by
+                #> the length each round and lands on n!.
+                made = perm[:pos] + [n] + perm[pos:]
+                nxt.append(made)
+        out = nxt
+    return out
+
+
 APPROACHES = [
+    {"id": "insert", "label": "Insert into every gap", "fn": insert_everywhere,
+     "complexity": {"time": "O(n \u00b7 n!)", "space": "O(n \u00b7 n!)"},
+     "viz": {"nums": "array", "out": "queue", "nxt": "queue"}},
     {"id": "backtrack", "label": "Backtracking", "fn": backtrack,
      "complexity": {"time": "O(n · n!)", "space": "O(n)"},
      "viz": {"nums": "array", "current": "stack", "used": "map", "$calls": "recursion"}},

@@ -38,7 +38,39 @@ def backtrack(s, start=0, current=None, out=None):
     return out
 
 
+def precompute_then_cut(s):
+    #> Work out once, for every pair of positions, whether that slice is a
+    #> palindrome. The recursion then never re-tests a slice — the backtracking
+    #> version re-checks the same pieces on every branch that reaches them.
+    n = len(s)
+    ok = [[False] * n for _ in range(n)]
+    for lo in range(n - 1, -1, -1):
+        for hi in range(lo, n):
+            #> A slice is a palindrome when its ends match and the inside was
+            #> already known to be one — which is why lo counts downward.
+            if s[lo] == s[hi] and (hi - lo < 2 or ok[lo + 1][hi - 1]):
+                ok[lo][hi] = True
+    out = []
+    _cut(s, ok, 0, [], out)
+    return out
+
+
+def _cut(s, ok, start, current, out):
+    if start == len(s):
+        out.append(list(current))
+        return
+    for end in range(start, len(s)):
+        #> One table lookup instead of comparing the slice character by character.
+        if ok[start][end]:
+            current.append(s[start:end + 1])
+            _cut(s, ok, end + 1, current, out)
+            current.pop()
+
+
 APPROACHES = [
+    {"id": "precompute", "label": "Table the palindromes first", "fn": precompute_then_cut,
+     "complexity": {"time": "O(n \u00b7 2\u207f)", "space": "O(n\u00b2)"},
+     "viz": {"s": "array", "ok": "grid", "current": "stack", "out": "queue", "$calls": "recursion"}},
     {"id": "backtrack", "label": "Cut, check, recurse", "fn": backtrack,
      "complexity": {"time": "O(n · 2ⁿ)", "space": "O(n)"},
      "viz": {"s": "array", "current": "stack", "out": "queue", "$calls": "recursion"}},
