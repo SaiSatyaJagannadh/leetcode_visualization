@@ -18,7 +18,7 @@ A = [[1, 3, 2], [4, 9, 5]]
 VARIANTS = [
     {"id": "typical", "label": "Ridge heights", "input": lambda: {"heights": [r[:] for r in A]}},
     {"id": "edge", "label": "Single cell", "input": lambda: {"heights": [[1]]}},
-    {"id": "worst-case", "label": "All equal", "input": lambda: {"heights": [[5, 5], [5, 5]]}},
+    {"id": "worst-case", "label": "All equal", "input": lambda: {"heights": [[5, 5]]}},
 ]
 
 
@@ -62,7 +62,45 @@ def _climb(heights, r, c, seen):
                     stack.append([nr, nc])
 
 
+def flow_downhill_from_each(heights):
+    #> The literal reading: from every cell, walk downhill and see which oceans
+    #> it can reach. Correct, and it repeats enormous amounts of work — the same
+    #> low ground gets re-explored once per cell that drains through it, which
+    #> is exactly what climbing up from the oceans avoids.
+    rows, cols = len(heights), len(heights[0])
+    out = []
+    for r in range(rows):
+        for c in range(cols):
+            seen = {}
+            reach = [False, False]
+            _drain(heights, r, c, seen, reach)
+            if reach[0] and reach[1]:
+                #> Reaches both, so this cell qualifies.
+                out.append([r, c])
+    return out
+
+
+def _drain(heights, r, c, seen, reach):
+    rows, cols = len(heights), len(heights[0])
+    key = str(r) + "," + str(c)
+    if key in seen:
+        return
+    seen[key] = True
+    if r == 0 or c == 0:
+        reach[0] = True  #> Touching a top or left edge means the Pacific.
+    if r == rows - 1 or c == cols - 1:
+        reach[1] = True  #> Bottom or right edge means the Atlantic.
+    for d in ([1, 0], [-1, 0], [0, 1], [0, -1]):
+        nr, nc = r + d[0], c + d[1]
+        #> Water only moves to equal or lower ground.
+        if 0 <= nr < rows and 0 <= nc < cols and heights[nr][nc] <= heights[r][c]:
+            _drain(heights, nr, nc, seen, reach)
+
+
 APPROACHES = [
+    {"id": "downhill", "label": "Drain from every cell", "fn": flow_downhill_from_each,
+     "complexity": {"time": "O((rc)\u00b2)", "space": "O(rc)"},
+     "viz": {"heights": "grid", "seen": "cells:heights", "out": "queue", "$calls": "recursion"}},
     {"id": "reverse", "label": "Climb inward from each ocean", "fn": climb_from_each_ocean,
      "complexity": {"time": "O(rc)", "space": "O(rc)"},
      "viz": {"heights": "grid", "pacific": "map", "atlantic": "map", "out": "array"}},

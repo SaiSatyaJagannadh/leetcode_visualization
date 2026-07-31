@@ -57,7 +57,46 @@ def bfs(begin, end, words):
     return 0
 
 
+def compare_every_pair(begin, end, words):
+    #> Instead of mutating letters to find neighbours, ask directly which words
+    #> differ by exactly one character. That costs a scan of the whole list per
+    #> step, where the letter-substitution version costs only the word's length.
+    pool = [w for w in words]
+    if end not in pool:
+        return 0
+    frontier = [begin]
+    used = {begin: True}
+    length = 1
+    while frontier:
+        length += 1
+        nxt = []
+        for word in frontier:
+            for other in pool:
+                #> A neighbour is any unused word one substitution away.
+                if other not in used and _one_apart(word, other):
+                    if other == end:
+                        return length
+                    used[other] = True
+                    nxt.append(other)
+        frontier = nxt
+    return 0
+
+
+def _one_apart(a, b):
+    if len(a) != len(b):
+        return False
+    diff = 0
+    for i in range(len(a)):
+        if a[i] != b[i]:
+            diff += 1
+    #> Exactly one mismatch: zero means the same word, two or more is too far.
+    return diff == 1
+
+
 APPROACHES = [
+    {"id": "pairwise", "label": "Compare every pair of words", "fn": compare_every_pair,
+     "complexity": {"time": "O(n\u00b2 \u00b7 L)", "space": "O(n)"},
+     "viz": {"pool": "array", "frontier": "queue", "used": "map"}},
     {"id": "bfs", "label": "BFS one letter at a time", "fn": bfs,
      "complexity": {"time": "O(N · L · 26)", "space": "O(N · L)"},
      "viz": {"frontier": "queue", "nxt": "queue", "pool": "map"}},
