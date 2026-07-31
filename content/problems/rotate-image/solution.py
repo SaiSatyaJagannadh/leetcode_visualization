@@ -35,7 +35,29 @@ def transpose_then_flip(matrix):
     return matrix
 
 
+def four_way_cycle(matrix):
+    #> Move four cells at a time around the square they form. One temporary
+    #> holds the value being displaced, so each element is written exactly once
+    #> instead of the two full passes the transpose-and-flip makes.
+    n = len(matrix)
+    for layer in range(n // 2):
+        last = n - 1 - layer
+        for i in range(layer, last):
+            offset = i - layer
+            #> Save the top, then pull each side into the one ahead of it,
+            #> travelling anticlockwise so the values land clockwise.
+            top = matrix[layer][i]
+            matrix[layer][i] = matrix[last - offset][layer]
+            matrix[last - offset][layer] = matrix[last][last - offset]
+            matrix[last][last - offset] = matrix[i][last]
+            matrix[i][last] = top
+    return matrix
+
+
 APPROACHES = [
+    {"id": "cycle", "label": "Rotate four cells at a time", "fn": four_way_cycle,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"matrix": "grid", "layer": "row:matrix", "i": "col:matrix"}},
     {"id": "transpose-flip", "label": "Transpose, then reverse rows", "fn": transpose_then_flip,
      "complexity": {"time": "O(n²)", "space": "O(1)"},
      "viz": {"matrix": "grid", "r": "row:matrix", "c": "col:matrix"}},

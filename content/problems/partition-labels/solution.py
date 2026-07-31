@@ -39,7 +39,33 @@ def last_occurrence(s):
     return out
 
 
+def grow_until_closed(s):
+    #> Without the last-occurrence map, a piece has to be re-checked: extend it
+    #> one character at a time and rescan to see whether anything inside it
+    #> reappears later. Same cuts, discovered the hard way.
+    out = []
+    start = 0
+    while start < len(s):
+        end = start
+        i = start
+        while i <= end:
+            ch = s[i]
+            for j in range(end + 1, len(s)):
+                #> This letter turns up again beyond the current edge, so the
+                #> piece must stretch to cover it.
+                if s[j] == ch and j > end:
+                    end = j
+            i += 1
+        #> Nothing inside recurs past `end`, so the piece can close here.
+        out.append(end - start + 1)
+        start = end + 1
+    return out
+
+
 APPROACHES = [
+    {"id": "rescan", "label": "Grow and rescan", "fn": grow_until_closed,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(1)"},
+     "viz": {"s": "array", "out": "queue", "start": "pointer:s", "end": "pointer:s", "i": "pointer:s"}},
     {"id": "last", "label": "Extend to the last occurrence", "fn": last_occurrence,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"s": "array", "last": "map", "i": "pointer:s", "end": "pointer:s", "out": "queue"}},

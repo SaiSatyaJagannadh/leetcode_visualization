@@ -37,7 +37,33 @@ def fast_power(x, n):
     return result
 
 
+def halve_recursively(x, n):
+    #> The same halving read top-down. x^n is (x^(n/2)) squared, which states the
+    #> saving directly: one subproblem, not two, so the depth is log n.
+    base = x
+    power = n
+    if power < 0:
+        base = 1 / base
+        power = -power
+    return _pow(base, power)
+
+
+def _pow(base, power):
+    if power == 0:
+        #> Anything to the zero is one, which anchors the whole recursion.
+        return 1.0
+    half = _pow(base, power // 2)
+    if power % 2 == 0:
+        #> Even: the two halves are identical, so square the one we computed.
+        return half * half
+    #> Odd: squaring loses one factor of the base, so put it back.
+    return half * half * base
+
+
 APPROACHES = [
+    {"id": "recursive", "label": "Halve recursively", "fn": halve_recursively,
+     "complexity": {"time": "O(log n)", "space": "O(log n)"},
+     "viz": {"$calls": "recursion"}},
     {"id": "fast", "label": "Square and halve", "fn": fast_power,
      "complexity": {"time": "O(log n)", "space": "O(1)"},
      "viz": {}},

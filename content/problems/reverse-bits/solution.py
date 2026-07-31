@@ -33,7 +33,28 @@ def shift_across(n):
     return result
 
 
+def collect_then_rebuild(n):
+    #> Read the bits into a list, reverse it, read it back. The shifting version
+    #> does the same job with no storage at all — the output register IS the
+    #> reversed list, built one bit at a time.
+    bits = []
+    x = n
+    for i in range(WIDTH):
+        #> Peel the lowest bit off, so the list comes out least-significant first.
+        bits.append(x & 1)
+        x = x >> 1
+    result = 0
+    for b in bits:
+        #> Reading that list forwards while shifting left writes it backwards,
+        #> which is exactly the reversal.
+        result = (result << 1) | b
+    return result
+
+
 APPROACHES = [
+    {"id": "collect", "label": "Collect the bits, rebuild", "fn": collect_then_rebuild,
+     "complexity": {"time": "O(32)", "space": "O(32)"},
+     "viz": {"bits": "bits"}},
     {"id": "shift", "label": "Shift bits across", "fn": shift_across,
      "complexity": {"time": "O(32)", "space": "O(1)"},
      "viz": {}},
