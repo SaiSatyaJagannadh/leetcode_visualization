@@ -3,6 +3,8 @@
 LeetViz — 150 LeetCode problems traced line by line in Python ahead of time, so
 the reader only replays JSON. See `CLAUDE.md` for the architecture.
 
+Live Streamlit app: **https://leetviz-traces.streamlit.app**
+
 ## Two front ends, one set of traces
 
 `traces/*.json` are committed build artifacts. Both readers replay the same ops.
@@ -29,11 +31,9 @@ python3 pipeline/check_streamlit.py   # replays all 150 traces through the reade
 Streamlit Community Cloud builds straight from this repo — no secrets needed,
 because nothing in the Streamlit path calls a model.
 
-1. Push to GitHub (already done if you are reading this there).
-2. Go to https://share.streamlit.io and sign in with GitHub.
-3. **New app** → this repo → branch `main` → main file `streamlit_app.py`.
-4. Deploy. It installs `requirements.txt` and serves at
-   `https://<your-app>.streamlit.app`.
+Already deployed at https://leetviz-traces.streamlit.app — it redeploys itself
+on every push to `main`. To stand up another copy: https://share.streamlit.io →
+**Create app** → this repo → branch `main` → main file `streamlit_app.py`.
 
 The Next.js site deploys separately to Vercel (`npx vercel --prod`), which is
 what serves `/solve` and `/admin/spend`.
