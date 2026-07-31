@@ -37,7 +37,28 @@ def keep_earliest_ends(intervals):
     return removed
 
 
+def longest_chain(intervals):
+    #> Turn it around: instead of counting what to delete, count the largest set
+    #> that can be kept, and subtract. Sorting by start makes this a longest
+    #> increasing chain, which is the same problem wearing a different hat.
+    spans = sorted(intervals, key=lambda s: s[0])
+    keep = [1] * len(spans)
+    best = 0
+    for i in range(len(spans)):
+        for j in range(i):
+            #> span j can precede span i only if it finishes before i begins.
+            if spans[j][1] <= spans[i][0] and keep[j] + 1 > keep[i]:
+                keep[i] = keep[j] + 1
+        if keep[i] > best:
+            best = keep[i]
+    #> Everything not in the longest keepable chain has to go.
+    return len(spans) - best
+
+
 APPROACHES = [
+    {"id": "longest-chain", "label": "Keep the longest chain", "fn": longest_chain,
+     "complexity": {"time": "O(n\u00b2)", "space": "O(n)"},
+     "viz": {"intervals": "intervals", "spans": "intervals", "keep": "array", "i": "pointer:keep", "j": "pointer:keep"}},
     {"id": "earliest-end", "label": "Keep the earliest finisher", "fn": keep_earliest_ends,
      "complexity": {"time": "O(n log n)", "space": "O(n)"},
      "viz": {"intervals": "intervals", "spans": "intervals", "span": "interval"}},

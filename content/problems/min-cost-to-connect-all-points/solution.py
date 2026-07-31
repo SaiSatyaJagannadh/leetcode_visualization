@@ -47,7 +47,42 @@ def prim(points):
     return total
 
 
+def kruskal(points):
+    #> The other classic spanning tree: forget growing one blob outward, just
+    #> sort every possible edge and take the cheap ones that join two groups
+    #> that were not already connected.
+    n = len(points)
+    edges = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = abs(points[i][0] - points[j][0]) + abs(points[i][1] - points[j][1])
+            edges.append([d, i, j])
+    edges = sorted(edges, key=lambda e: e[0])
+    parent = [i for i in range(n)]
+    total = 0
+    for e in edges:
+        a = _root(parent, e[1])
+        b = _root(parent, e[2])
+        if a == b:
+            #> Already connected, so this edge would only close a cycle.
+            continue
+        #> Cheapest edge joining two separate groups is always safe to take.
+        parent[a] = b
+        total += e[0]
+    return total
+
+
+def _root(parent, x):
+    while parent[x] != x:
+        parent[x] = parent[parent[x]]
+        x = parent[x]
+    return x
+
+
 APPROACHES = [
+    {"id": "kruskal", "label": "Sort every edge, join groups", "fn": kruskal,
+     "complexity": {"time": "O(n\u00b2 log n)", "space": "O(n\u00b2)"},
+     "viz": {"points": "array", "edges": "array", "parent": "array"}},
     {"id": "prim", "label": "Prim's algorithm", "fn": prim,
      "complexity": {"time": "O(n²)", "space": "O(n)"},
      "viz": {"points": "array", "best": "array", "inside": "array", "pick": "pointer:best"}},

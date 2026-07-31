@@ -47,7 +47,31 @@ def _find(parent, x):
     return x
 
 
+def walk_each_group(adj):
+    #> No union-find: start a fresh walk from every unvisited node and sweep up
+    #> everything it can reach. Each walk that starts is exactly one component.
+    seen = {}
+    groups = 0
+    for node in adj:
+        if str(node) in seen:
+            #> Already swallowed by an earlier walk, so it starts nothing new.
+            continue
+        groups += 1
+        stack = [node]
+        while stack:
+            cur = stack.pop()
+            if str(cur) in seen:
+                continue
+            seen[str(cur)] = True
+            for other in adj[cur]:
+                stack.append(other)
+    return groups
+
+
 APPROACHES = [
+    {"id": "walk", "label": "One walk per group", "fn": walk_each_group,
+     "complexity": {"time": "O(V + E)", "space": "O(V)"},
+     "viz": {"adj": "graph", "seen": "marked:adj", "stack": "stack"}},
     {"id": "union-find", "label": "Union-find", "fn": union_find,
      "complexity": {"time": "O(E · α(V))", "space": "O(V)"},
      "viz": {"adj": "graph", "parent": "labels:adj"}},
