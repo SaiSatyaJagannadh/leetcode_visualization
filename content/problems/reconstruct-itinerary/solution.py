@@ -48,7 +48,40 @@ def hierholzer(tickets):
     return route
 
 
+def backtrack_route(tickets):
+    #> The direct search: try tickets in alphabetical order and commit, undoing
+    #> whenever the trip strands us with tickets unused. The first complete
+    #> route found is the smallest, because every choice was made smallest-first.
+    routes = {}
+    for t in sorted(tickets):
+        routes.setdefault(t[0], []).append(t[1])
+    route = ["JFK"]
+    _fly(routes, "JFK", len(tickets), route)
+    return route
+
+
+def _fly(routes, here, left, route):
+    if left == 0:
+        #> Every ticket used, so this is a complete trip.
+        return True
+    options = routes.get(here, [])
+    for i in range(len(options)):
+        nxt = options[i]
+        #> Take this ticket out of circulation before flying on.
+        options.pop(i)
+        route.append(nxt)
+        if _fly(routes, nxt, left - 1, route):
+            return True
+        #> Dead end: put the ticket back and the airport out of the route.
+        options.insert(i, nxt)
+        route.pop()
+    return False
+
+
 APPROACHES = [
+    {"id": "backtrack", "label": "Try tickets, undo dead ends", "fn": backtrack_route,
+     "complexity": {"time": "O(E!)", "space": "O(E)"},
+     "viz": {"routes": "map", "route": "queue", "$calls": "recursion"}},
     {"id": "hierholzer", "label": "Fly until stuck, then back up", "fn": hierholzer,
      "complexity": {"time": "O(E log E)", "space": "O(E)"},
      "viz": {"routes": "map", "stack": "stack", "route": "queue"}},

@@ -51,7 +51,42 @@ def ordered_map(cap, ops):
     return out
 
 
+def stamped(cap, ops):
+    #> No ordering list at all: give every entry the clock value at its last use
+    #> and, when eviction is needed, scan for the smallest stamp. The order list
+    #> exists precisely to turn that scan into a pop.
+    clock = [0]
+    store = {}
+    used = {}
+    out = []
+    for op in ops:
+        kind, key, value = op[0], op[1], op[2]
+        clock[0] += 1
+        if kind == "get":
+            if key not in store:
+                out.append(-1)
+                continue
+            #> A hit refreshes the stamp, which is what "recently used" means here.
+            used[key] = clock[0]
+            out.append(store[key])
+        else:
+            if key not in store and len(store) >= cap:
+                #> Full and this key is new, so find the least recently used.
+                victim = None
+                for k in used:
+                    if victim is None or used[k] < used[victim]:
+                        victim = k
+                del store[victim]
+                del used[victim]
+            store[key] = value
+            used[key] = clock[0]
+    return out
+
+
 APPROACHES = [
+    {"id": "stamped", "label": "Timestamp every entry", "fn": stamped,
+     "complexity": {"time": "O(n) per eviction", "space": "O(n)"},
+     "viz": {"store": "map", "used": "map", "out": "queue"}},
     {"id": "ordered", "label": "Map plus recency order", "fn": ordered_map,
      "complexity": {"time": "O(1) amortised", "space": "O(capacity)"},
      "viz": {"store": "map", "order": "queue", "out": "queue"}},
