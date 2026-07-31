@@ -64,7 +64,44 @@ def _hunt(board, r, c, node, found):
     board[r][c] = ch
 
 
+def one_word_at_a_time(board, words):
+    #> No trie: search the board separately for each word. Shared prefixes buy
+    #> nothing here — "oa", "oat" and "oats" each re-walk the same opening
+    #> letters, which is exactly the repetition the trie collapses.
+    found = []
+    for word in words:
+        hit = False
+        for r in range(len(board)):
+            for c in range(len(board[0])):
+                if _spell(board, r, c, word, 0):
+                    hit = True
+        if hit:
+            found.append(word)
+    return sorted(found)
+
+
+def _spell(board, r, c, word, i):
+    if i == len(word):
+        return True
+    if r < 0 or r >= len(board) or c < 0 or c >= len(board[0]):
+        return False
+    if board[r][c] != word[i]:
+        return False
+    #> Blank the cell so this path cannot step back onto it, then restore it.
+    saved = board[r][c]
+    board[r][c] = "#"
+    out = (_spell(board, r + 1, c, word, i + 1)
+           or _spell(board, r - 1, c, word, i + 1)
+           or _spell(board, r, c + 1, word, i + 1)
+           or _spell(board, r, c - 1, word, i + 1))
+    board[r][c] = saved
+    return out
+
+
 APPROACHES = [
+    {"id": "per-word", "label": "Search once per word", "fn": one_word_at_a_time,
+     "complexity": {"time": "O(words \u00b7 rc \u00b7 4^L)", "space": "O(L)"},
+     "viz": {"board": "grid", "found": "queue", "$calls": "recursion"}},
     {"id": "trie", "label": "Trie-guided backtracking", "fn": trie_walk,
      "complexity": {"time": "O(rc · 4^L)", "space": "O(total chars)"},
      "viz": {"board": "grid", "root": "trie", "found": "queue", "$calls": "recursion"}},

@@ -52,7 +52,53 @@ def widest_path(grid):
     return best[n - 1][n - 1]
 
 
+def rising_tide(grid):
+    #> Turn it around: guess a water level and ask whether the corner is
+    #> reachable using only cells at or below it. Try levels in increasing order
+    #> and the first that works is the answer. No priority ordering needed —
+    #> the guess replaces it.
+    n = len(grid)
+    levels = []
+    for r in range(n):
+        for c in range(n):
+            levels.append(grid[r][c])
+    levels = sorted(levels)
+    for level in levels:
+        #> A level below the starting cell can never work, so skip it fast.
+        if level < grid[0][0]:
+            continue
+        if _reaches(grid, level):
+            return level
+    return grid[0][0]
+
+
+def _reaches(grid, level):
+    n = len(grid)
+    seen = {}
+    stack = [[0, 0]]
+    while stack:
+        cell = stack.pop()
+        r, c = cell[0], cell[1]
+        key = str(r) + "," + str(c)
+        if not (0 <= r < n and 0 <= c < n) or key in seen:
+            continue
+        if grid[r][c] > level:
+            #> Still above water at this level, so it cannot be crossed yet.
+            continue
+        seen[key] = True
+        if r == n - 1 and c == n - 1:
+            return True
+        stack.append([r + 1, c])
+        stack.append([r - 1, c])
+        stack.append([r, c + 1])
+        stack.append([r, c - 1])
+    return False
+
+
 APPROACHES = [
+    {"id": "rising-tide", "label": "Guess a level, test reachability", "fn": rising_tide,
+     "complexity": {"time": "O(n\u2074)", "space": "O(n\u00b2)"},
+     "viz": {"grid": "grid", "levels": "array", "seen": "cells:grid", "stack": "cells:grid"}},
     {"id": "widest", "label": "Dijkstra on the path maximum", "fn": widest_path,
      "complexity": {"time": "O(n⁴)", "space": "O(n²)"},
      "viz": {"grid": "grid", "best": "grid", "pr": "row:best", "pc": "col:best"}},
