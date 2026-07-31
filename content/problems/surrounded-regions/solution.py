@@ -55,7 +55,49 @@ def _mark(board, r, c):
         stack.append([cr, cc - 1])
 
 
+def enclosed_check(board):
+    #> The direct reading: for each region, walk it and ask whether it ever
+    #> touches the border. Every region gets its own traversal, and a region
+    #> that IS safe still has to be walked in full before we know.
+    rows, cols = len(board), len(board[0])
+    for r in range(rows):
+        for c in range(cols):
+            if board[r][c] != "O":
+                continue
+            region = []
+            touches = _collect(board, r, c, region)
+            for cell in region:
+                #> Mark the whole region at once, now that its fate is known.
+                board[cell[0]][cell[1]] = "O" if touches else "X"
+    return board
+
+
+def _collect(board, r, c, region):
+    rows, cols = len(board), len(board[0])
+    stack = [[r, c]]
+    touches = False
+    while stack:
+        cell = stack.pop()
+        cr, cc = cell[0], cell[1]
+        if not (0 <= cr < rows and 0 <= cc < cols) or board[cr][cc] != "O":
+            continue
+        #> A third value keeps this region from being re-collected later.
+        board[cr][cc] = "V"
+        region.append([cr, cc])
+        if cr == 0 or cc == 0 or cr == rows - 1 or cc == cols - 1:
+            #> Reaches the edge, so the whole region survives.
+            touches = True
+        stack.append([cr + 1, cc])
+        stack.append([cr - 1, cc])
+        stack.append([cr, cc + 1])
+        stack.append([cr, cc - 1])
+    return touches
+
+
 APPROACHES = [
+    {"id": "per-region", "label": "Walk each region, ask if it escapes", "fn": enclosed_check,
+     "complexity": {"time": "O(rc)", "space": "O(rc)"},
+     "viz": {"board": "grid", "region": "cells:board", "stack": "cells:board"}},
     {"id": "border", "label": "Mark from the border inward", "fn": from_the_border,
      "complexity": {"time": "O(rc)", "space": "O(rc)"},
      "viz": {"board": "grid", "r": "row:board", "c": "col:board"}},

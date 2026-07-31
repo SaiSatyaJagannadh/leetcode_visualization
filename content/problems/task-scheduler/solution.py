@@ -40,7 +40,38 @@ def from_the_busiest(tasks, n):
     return max(frame, len(tasks))
 
 
+def simulate_the_clock(tasks, n):
+    #> Actually run the schedule: each tick, pick the task with the most left
+    #> that is off cooldown, or idle. Slower, but it shows WHY the formula works —
+    #> the busiest task really does dictate where the idle slots fall.
+    counts = {}
+    for t in tasks:
+        counts[t] = counts.get(t, 0) + 1
+    ready_at = {}
+    for t in counts:
+        ready_at[t] = 0
+    time = 0
+    left = len(tasks)
+    while left > 0:
+        pick = None
+        for t in counts:
+            #> Most remaining wins, and only among tasks off cooldown.
+            if counts[t] > 0 and ready_at[t] <= time:
+                if pick is None or counts[t] > counts[pick]:
+                    pick = t
+        if pick is not None:
+            counts[pick] -= 1
+            #> It cannot run again until n more slots have passed.
+            ready_at[pick] = time + n + 1
+            left -= 1
+        time += 1
+    return time
+
+
 APPROACHES = [
+    {"id": "simulate", "label": "Run the clock", "fn": simulate_the_clock,
+     "complexity": {"time": "O(total \u00b7 kinds)", "space": "O(kinds)"},
+     "viz": {"counts": "map", "ready_at": "map"}},
     {"id": "frame", "label": "Count from the busiest task", "fn": from_the_busiest,
      "complexity": {"time": "O(n)", "space": "O(1)"},
      "viz": {"tasks": "array", "counts": "map"}},

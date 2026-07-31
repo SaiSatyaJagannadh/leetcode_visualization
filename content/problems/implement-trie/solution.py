@@ -64,7 +64,34 @@ def trie(words, queries):
     return found
 
 
+def sorted_list(words, queries):
+    #> No trie: keep the words sorted and binary-search each query. Lookups are
+    #> log n rather than length-of-word, and the prefix sharing that makes a trie
+    #> cheap on memory is entirely absent — every word is stored in full.
+    stored = sorted(words)
+    out = []
+    for q in queries:
+        lo, hi = 0, len(stored) - 1
+        found = False
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            if stored[mid] == q:
+                #> Exact hit. Note this answers "was this word inserted", which
+                #> is the same question the trie's end-marker answers.
+                found = True
+                break
+            if stored[mid] < q:
+                lo = mid + 1
+            else:
+                hi = mid - 1
+        out.append(found)
+    return out
+
+
 APPROACHES = [
+    {"id": "sorted-list", "label": "Sorted list and binary search", "fn": sorted_list,
+     "complexity": {"time": "O(q log w)", "space": "O(total chars)"},
+     "viz": {"stored": "array", "out": "queue", "lo": "pointer:stored", "hi": "pointer:stored", "mid": "pointer:stored"}},
     {
         "id": "nested-dict",
         "label": "Nested dictionaries",
