@@ -31,7 +31,31 @@ def bottom_up(cost):
     return best[n]
 
 
+MEMO = {}
+
+
+def top_down(cost):
+    #> Asked from the top instead of built from the bottom: what does it cost to
+    #> finish from step i? The two starting steps are both legal entry points.
+    MEMO.clear()
+    return min(_from(cost, 0), _from(cost, 1))
+
+
+def _from(cost, i):
+    if i >= len(cost):
+        #> Past the top, so nothing left to pay.
+        return 0
+    if i in MEMO:
+        return MEMO[i]
+    #> Pay this step's fee, then take one or two steps, whichever finishes cheaper.
+    MEMO[i] = cost[i] + min(_from(cost, i + 1), _from(cost, i + 2))
+    return MEMO[i]
+
+
 APPROACHES = [
+    {"id": "top-down", "label": "Cost to finish from here", "fn": top_down,
+     "complexity": {"time": "O(n)", "space": "O(n)"},
+     "viz": {"cost": "array", "MEMO": "map", "$calls": "recursion"}},
     {"id": "bottom-up", "label": "Bottom-up", "fn": bottom_up,
      "complexity": {"time": "O(n)", "space": "O(n)"},
      "viz": {"cost": "array", "best": "array", "i": "pointer:best"}},

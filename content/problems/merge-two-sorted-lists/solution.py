@@ -40,7 +40,26 @@ def with_dummy(a, b):
     return dummy.next
 
 
+def recursive_merge(a, b):
+    #> No dummy head and no loop: the smaller head is the answer's first node,
+    #> and the rest of the answer is the same problem on what remains.
+    if a is None:
+        #> Nothing left on one side, so the other side IS the remainder.
+        return b
+    if b is None:
+        return a
+    if a.val <= b.val:
+        #> a wins this position; its tail becomes whatever the merge returns.
+        a.next = recursive_merge(a.next, b)
+        return a
+    b.next = recursive_merge(a, b.next)
+    return b
+
+
 APPROACHES = [
+    {"id": "recursive", "label": "Recursive merge", "fn": recursive_merge,
+     "complexity": {"time": "O(m + n)", "space": "O(m + n)"},
+     "viz": {"a": "node", "b": "node", "$calls": "recursion"}},
     {"id": "dummy", "label": "Dummy head", "fn": with_dummy,
      "complexity": {"time": "O(m + n)", "space": "O(1)"},
      "viz": {"a": "node", "b": "node", "dummy": "node", "tail": "node"}},
