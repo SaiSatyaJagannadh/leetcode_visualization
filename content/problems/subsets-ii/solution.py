@@ -39,7 +39,40 @@ def backtrack(nums, start=0, current=None, out=None):
     return out
 
 
+def count_each_value(nums):
+    #> Group equal values first, then decide how MANY of each to take rather
+    #> than which positions. Duplicates cannot arise, so no skip rule is needed —
+    #> the shape of the recursion rules them out instead of a guard.
+    ordered = sorted(nums)
+    groups = []
+    for v in ordered:
+        if groups and groups[-1][0] == v:
+            groups[-1][1] += 1
+        else:
+            groups.append([v, 1])
+    out = []
+    _choose(groups, 0, [], out)
+    return out
+
+
+def _choose(groups, i, current, out):
+    if i == len(groups):
+        out.append(list(current))
+        return
+    value, most = groups[i][0], groups[i][1]
+    for take in range(most + 1):
+        #> Take 0, 1, ... up to every copy of this value, then move on.
+        for _ in range(take):
+            current.append(value)
+        _choose(groups, i + 1, current, out)
+        for _ in range(take):
+            current.pop()
+
+
 APPROACHES = [
+    {"id": "counts", "label": "Choose how many of each", "fn": count_each_value,
+     "complexity": {"time": "O(2\u207f)", "space": "O(n)"},
+     "viz": {"ordered": "array", "groups": "array", "current": "stack", "out": "queue", "$calls": "recursion"}},
     {"id": "backtrack", "label": "Sort, then skip repeats", "fn": backtrack,
      "complexity": {"time": "O(n · 2ⁿ)", "space": "O(n)"},
      "viz": {"nums": "array", "current": "stack", "out": "queue", "$calls": "recursion"}},

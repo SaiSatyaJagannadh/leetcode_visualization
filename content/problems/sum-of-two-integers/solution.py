@@ -31,7 +31,27 @@ def xor_and_carry(a, b):
     return x
 
 
+def carry_one_column(a, b):
+    #> The same addition done column by column, the way it is taught on paper.
+    #> The XOR version does all 32 columns at once; this walks them, which makes
+    #> the carry propagation visible rather than implicit.
+    result = 0
+    carry = 0
+    for i in range(32):
+        #> Pull out the i-th bit of each side.
+        x = (a >> i) & 1
+        y = (b >> i) & 1
+        total = x + y + carry
+        #> The column keeps the low bit; anything above it carries left.
+        result = result | ((total & 1) << i)
+        carry = total >> 1
+    return result
+
+
 APPROACHES = [
+    {"id": "columns", "label": "One column at a time", "fn": carry_one_column,
+     "complexity": {"time": "O(32)", "space": "O(1)"},
+     "viz": {"result": "bits"}},
     {"id": "xor-carry", "label": "XOR for the sum, AND for the carry", "fn": xor_and_carry,
      "complexity": {"time": "O(32)", "space": "O(1)"},
      "viz": {}},

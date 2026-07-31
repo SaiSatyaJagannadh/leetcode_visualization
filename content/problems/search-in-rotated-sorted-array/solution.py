@@ -42,7 +42,44 @@ def binary(nums, target):
     return -1
 
 
+def find_pivot_then_search(nums, target):
+    #> Two clean binary searches instead of one clever hybrid. First locate the
+    #> rotation point, then search whichever side can hold the target — both
+    #> halves are ordinary sorted arrays once the seam is known.
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] > nums[hi]:
+            #> The seam is to the right of mid, because a sorted run never
+            #> ends higher than it finishes.
+            lo = mid + 1
+        else:
+            hi = mid
+    pivot = lo
+    #> Pick the side by comparing against the very first element.
+    if target >= nums[0] and pivot > 0:
+        return _search(nums, target, 0, pivot - 1)
+    if pivot == 0:
+        return _search(nums, target, 0, len(nums) - 1)
+    return _search(nums, target, pivot, len(nums) - 1)
+
+
+def _search(nums, target, lo, hi):
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if nums[mid] == target:
+            return mid
+        if nums[mid] < target:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return -1
+
+
 APPROACHES = [
+    {"id": "pivot", "label": "Find the seam, then search", "fn": find_pivot_then_search,
+     "complexity": {"time": "O(log n)", "space": "O(1)"},
+     "viz": {"nums": "array", "lo": "pointer:nums", "hi": "pointer:nums", "mid": "pointer:nums", "pivot": "pointer:nums"}},
     {"id": "binary", "label": "Binary search the clean half", "fn": binary,
      "complexity": {"time": "O(log n)", "space": "O(1)"},
      "viz": {"nums": "array", "lo": "pointer:nums", "hi": "pointer:nums", "mid": "pointer:nums"}},

@@ -51,7 +51,35 @@ def boundaries(matrix):
     return out
 
 
+def peel_and_rotate(matrix):
+    #> A different mental model: take the whole top row, then rotate what is left
+    #> anticlockwise and do it again. Every ring becomes a top row eventually, so
+    #> the four-direction bookkeeping disappears entirely.
+    rows = [r[:] for r in matrix]
+    out = []
+    while rows:
+        #> The top row is always next in the spiral, by construction.
+        top = rows[0]
+        for v in top:
+            out.append(v)
+        rest = rows[1:]
+        if not rest:
+            break
+        #> Rotate the remainder anticlockwise: last column becomes the new top row.
+        turned = []
+        for c in range(len(rest[0]) - 1, -1, -1):
+            row = []
+            for r in range(len(rest)):
+                row.append(rest[r][c])
+            turned.append(row)
+        rows = turned
+    return out
+
+
 APPROACHES = [
+    {"id": "peel", "label": "Peel the top, rotate the rest", "fn": peel_and_rotate,
+     "complexity": {"time": "O(rc)", "space": "O(rc)"},
+     "viz": {"matrix": "grid", "rows": "grid", "out": "queue"}},
     {
         "id": "boundaries",
         "label": "Shrinking walls",
