@@ -163,6 +163,31 @@ del os.environ["TURNSTILE_SECRET"]
 status, _, audit, _ = run("   ")
 check("empty prompt -> 400 before any gate", status == 400 and audit == [], str(audit))
 
+# 9b. So is an oversized one. The hash gate calls a model before quota and cap
+#     are consulted, so an unbounded prompt bills us on a request that is about
+#     to be refused anyway.
+reset()
+status, body, audit, _ = run("x" * (_lib.MAX_PROMPT_CHARS + 1))
+check("oversized prompt -> 400 before any gate", status == 400 and audit == [], str(audit))
+check("400 body names the limit", body.get("limit") == _lib.MAX_PROMPT_CHARS, str(body))
+status, _, audit, _ = run("x" * _lib.MAX_PROMPT_CHARS)
+check("a prompt exactly at the limit is allowed", status == 200, str(status))
+
+# 9c. An unreadable quota counter reads as 0.0, which is also what a fresh one
+#     reads as. Free generations must stop rather than assume nothing is spent.
+reset()
+_lib.store.down = True
+try:
+    status, body, audit, _ = run("kv is down", sid="s9", ip="10.0.0.9")
+    check("degraded store -> 503", status == 503, str(status))
+    check("degraded store stops at the quota gate", audit == FULL[:4], str(audit))
+    check("503 body points at the BYO path", body.get("byoKey", {}).get("header") == "x-byo-key")
+    status, _, _, _ = run("kv is down", sid="s9", ip="10.0.0.9", byo=BYO_KEY)
+    check("BYO key works while the store is degraded", status == 200, str(status))
+finally:
+    _lib.store.down = False
+check("free generations resume once the store answers", run("kv is back")[0] == 200)
+
 # 10. Redaction covers bare key shapes, not just the key we were handed.
 check(
     "redact scrubs sk- keys",

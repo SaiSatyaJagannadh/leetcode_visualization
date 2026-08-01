@@ -45,6 +45,12 @@ MONTHLY_CAP_USD = float(os.environ.get("SOLVE_MONTHLY_USD_CAP", "25"))
 # offline dev generator. An unpriced call must not count as free, or the cap
 # stops capping.
 STUB_COST_USD = float(os.environ.get("SOLVE_STUB_COST_USD", "0.02"))
+# Input tokens are billed and nothing else bounds them. The normalize call on the
+# hash gate runs *before* quota and cap by design, so without a length limit a
+# caller who is over quota, or past the monthly cap, can still bill us for an
+# arbitrarily large prompt on every request. A real problem statement with
+# examples and constraints is well under this.
+MAX_PROMPT_CHARS = int(os.environ.get("SOLVE_MAX_PROMPT_CHARS", "8000"))
 DAY_TTL = 86_400
 CACHE_TTL = 30 * DAY_TTL
 
@@ -53,7 +59,8 @@ CACHE_TTL = 30 * DAY_TTL
 #   403 turnstile verification failed
 #   200 cache hit (body.cached == true) or fresh generation
 #   402 per-session/IP daily quota exhausted — body carries the BYO-key path
-#   503 global monthly spend cap reached, free tier off — BYO key still works
+#   503 global monthly spend cap reached, or the quota store is unreadable —
+#       free tier off in both cases, BYO key still works
 #   429 upstream rate limit — not our bug, nothing charged
 #   502 generation failed
 #   401 admin endpoint, bad or missing shared secret
@@ -93,6 +100,11 @@ class _KV:
     def __init__(self, url, token):
         self.url = url.rstrip("/")
         self.token = token
+        # A failed read returns None, which num() reads as 0.0 — the same value a
+        # brand-new quota counter has. Nothing downstream could tell "you have
+        # spent nothing" from "I could not find out", so an outage silently
+        # opened both cost gates. The flag is what makes the two distinguishable.
+        self.down = False
 
     def _call(self, path, query="", body=None):
         req = urllib.request.Request(
@@ -103,10 +115,14 @@ class _KV:
         )
         try:
             with urllib.request.urlopen(req, timeout=5) as r:
-                return json.load(r).get("result")
+                out = json.load(r).get("result")
+            self.down = False
+            return out
         except (urllib.error.URLError, ValueError, TimeoutError) as e:
-            # A KV outage must not hand out free generations, but it also must
-            # not hard-fail a read. Reads return None; writes are best-effort.
+            # Reads still return None and writes are still best-effort: a KV blip
+            # must not hard-fail. `down` is what stops solve() from treating the
+            # None as a zero and handing out free generations.
+            self.down = True
             log(f"KV error on {path.split('/')[0]}: {type(e).__name__}")
             return None
 
@@ -292,6 +308,13 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
     prompt = (prompt or "").strip()
     if not prompt:
         return 400, {"error": "prompt required"}, audit
+    # Before turnstile: rejecting on length costs a len() and no network call.
+    if len(prompt) > MAX_PROMPT_CHARS:
+        return (
+            400,
+            {"error": "prompt too long", "limit": MAX_PROMPT_CHARS, "got": len(prompt)},
+            audit,
+        )
 
     # 1. turnstile — cheapest possible rejection of a bot
     audit.append("turnstile")
@@ -323,6 +346,19 @@ def solve(prompt, turnstile_token, session_id, ip, byo_key=None):
     qs, qi = f"quota:s:{session_id}:{d}", f"quota:i:{anon(ip)}:{d}"
     if not byo_key:
         used = max(num(store.get(qs)), num(store.get(qi)))
+        if getattr(store, "down", False):
+            # An unreadable counter is not a zeroed one. Free generations are the
+            # only thing that can spend money here, so they are what stops.
+            return (
+                503,
+                {
+                    "error": "quota store unavailable",
+                    "retry": "Free generations are paused until the counter store "
+                    "answers again. Your own OpenAI key still works.",
+                    "byoKey": {"header": "x-byo-key"},
+                },
+                audit,
+            )
         if used >= FREE_PER_DAY:
             return (
                 402,
