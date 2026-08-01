@@ -16,7 +16,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from streamlit_app import render_state, source_html, state_at, touched  # noqa: E402
+from streamlit_app import (  # noqa: E402
+    render_state,
+    resolve,
+    source_html,
+    state_at,
+    touched,
+)
 
 fails = []
 traces = sorted((ROOT / "traces").glob("*.json"))
@@ -44,9 +50,37 @@ for path in traces:
                 steps_seen += 1
 
 print(f"{len(traces) - 1} traces, {steps_seen} steps replayed")
-for f in fails[:20]:
+
+
+# The ask box is a lookup over the same index, so it is checkable offline. These
+# are the phrasings a reader actually types; each one has been wrong once.
+index = json.loads((ROOT / "traces" / "index.json").read_text())
+cases = [
+    ("leetcode 25", "reverse-nodes-in-k-group"),
+    ("25", "reverse-nodes-in-k-group"),
+    ("lc 1", "two-sum"),
+    ("two sum", "two-sum"),
+    ("Reverse Linked List", "reverse-linked-list"),
+    ("revrse linked list", "reverse-linked-list"),  # fuzzy, for typos
+    ("leetcode 1882", None),  # outside the 150 — say so, do not guess
+    ("xyzzy", None),
+]
+for query, want in cases:
+    got, reply = resolve(query, index["problems"])
+    if got != want:
+        fails.append(f"resolve({query!r}) gave {got!r}, wanted {want!r}")
+    if not reply:
+        fails.append(f"resolve({query!r}) gave no reply")
+
+# A pattern name lists the pattern rather than landing on the one title that
+# happens to contain those words.
+got, reply = resolve("sliding window", index["problems"])
+if got is not None or "Sliding Window" not in reply:
+    fails.append(f"resolve('sliding window') should list the pattern, gave {got!r}")
+
+print(f"ask box: {len(cases) + 1} queries")
+for f in fails:
     print("  FAIL", f)
 if fails:
-    print(f"{len(fails)} failures")
     sys.exit(1)
 print("streamlit reader: ok")
