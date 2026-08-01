@@ -51,7 +51,8 @@ modes:
 
 Add these under **Manage app → Settings → Secrets** on Streamlit Cloud (locally,
 `.streamlit/secrets.toml`, which is gitignored). Any one provider is enough — the
-chain tries them in order and fails over on 429 and 5xx:
+chain tries them in order and fails over on 429, 5xx, and a reply cut off at the
+output cap:
 
 ```toml
 GEMINI_API_KEY = "AIza…"

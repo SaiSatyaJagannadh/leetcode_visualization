@@ -39,7 +39,13 @@ SCHEMA_FILE = ROOT / "prompts" / "solve-schema.json"
 EXEMPLAR = ROOT / "traces" / "two-sum.json"
 SPLIT = "---8<--- context"
 
-MAX_OUTPUT_TOKENS = int(os.environ.get("SOLVE_MAX_OUTPUT_TOKENS", "16000"))
+# A reasoning model spends this budget on thinking *before* it writes a token of
+# JSON, and those tokens are invisible in the response but count against the cap.
+# At 16000 a full trace — two approaches, three variants each, narrated — was
+# being cut off mid-stream on gemini-2.5-flash, which reads as "output token cap
+# reached" rather than as a too-small cap. This is under every configured model's
+# output limit; raise it per deployment if a model is chattier still.
+MAX_OUTPUT_TOKENS = int(os.environ.get("SOLVE_MAX_OUTPUT_TOKENS", "32000"))
 MAX_REPAIRS = 2  # hard stop, per the model ladder
 # A congested NIM free tier answers in 125-180s, so the old hard-coded 180s read
 # timeout cut off legitimate replies. Budget math worth knowing: this must stay
@@ -68,7 +74,17 @@ THIN = "[thin] "
 
 
 class GenerationError(Exception):
-    """Semantic failure the repair ladder could not fix. The reason never leaks a key."""
+    """Semantic failure the repair ladder could not fix. The reason never leaks a key.
+
+    `retry` is False by default and that default is the rule: a trace that will
+    not replay is not fixed by handing the same prompt to a weaker model. It is
+    set only where nothing was produced at all — see the truncation case in
+    call(), where the next provider's limits are genuinely different.
+    """
+
+    def __init__(self, message, retry=False):
+        super().__init__(message)
+        self.retry = retry
 
 
 # --------------------------------------------------------------------------- #
@@ -162,8 +178,12 @@ def _retryable(e):
     HTTPError subclasses URLError, so it must be tested first — otherwise a 400
     (our malformed request) would fail over and get misreported as an outage.
     A semantic GenerationError is never retryable either: if a trace will not
-    replay, a weaker model is not the fix and would just double the bill.
+    replay, a weaker model is not the fix and would just double the bill. The
+    one exception carries its own flag, because "the model stopped mid-trace"
+    and "the model finished and was wrong" are different facts.
     """
+    if isinstance(e, GenerationError):
+        return e.retry
     if isinstance(e, urllib.error.HTTPError):
         return e.code in (429, 500, 502, 503, 504)
     return isinstance(e, (urllib.error.URLError, TimeoutError))
@@ -440,7 +460,15 @@ def call(role, msgs, key, art, byo=None, prov=OPENAI):
     )
     choice = (raw.get("choices") or [{}])[0]
     if choice.get("finish_reason") == "length":
-        raise GenerationError("output token cap reached before the trace finished")
+        # Not a trace that will not replay — no trace at all. How much of the cap
+        # a model spends on hidden reasoning before it writes a token of JSON
+        # differs per model, so the next provider in the chain is a real fix
+        # rather than a downgrade. This is the only retryable GenerationError.
+        raise GenerationError(
+            f"{prov.id}/{name} stopped at the {MAX_OUTPUT_TOKENS}-token output cap "
+            "before the trace finished",
+            retry=True,
+        )
     if (choice.get("message") or {}).get("refusal"):
         raise GenerationError("model refused the request")
     u = _usage(raw)

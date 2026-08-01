@@ -442,6 +442,29 @@ except _gen.GenerationError:
     pass
 check("a semantic failure does not fail over to a weaker model", seen == ["openai"], str(seen))
 
+# 13a-bis. Truncation is the one GenerationError that DOES fail over: the model
+# stopped mid-trace, so there is no trace to judge, and how much of the cap a
+# model burns on hidden reasoning differs per provider.
+check("_retryable tells truncation apart from a wrong answer",
+      _gen._retryable(_gen.GenerationError("cap", retry=True))
+      and not _gen._retryable(_gen.GenerationError("will not replay")))
+
+with patched(_gen, "_post", lambda *a, **k: {"choices": [{"finish_reason": "length"}]}):
+    try:
+        _gen.call("GENERATE", [], "k", _gen.artifact(), None, _gen.OPENAI)
+        truncated = None
+    except _gen.GenerationError as e:
+        truncated = e
+check("call() flags a truncated response as retryable",
+      truncated is not None and truncated.retry, repr(truncated))
+
+fail_on_error = [_gen.GenerationError("cap", retry=True)]
+seen = []
+with patched(_gen, "call", _fake("openai", seen)):
+    prob, _, _ = _gen.generate("reverse a linked list")
+check("a truncated trace fails over to the next provider", seen == ["openai", "nvidia"], str(seen))
+check("the trace after a truncation failover is still valid", prob["schemaVersion"] == 1)
+
 fail_on_error = [_HTTP(429)]
 seen = []
 try:

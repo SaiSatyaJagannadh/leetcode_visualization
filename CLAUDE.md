@@ -215,12 +215,16 @@ in practice, and a drift shows up as a cache miss, never as a wrong trace.
 the same chat-completions protocol, so only the base URL, key and model names
 differ. Both are `Provider` instances; there are no model literals anywhere.
 
-Failover fires on 429 and 5xx only. A 400 is our own malformed request and must
-surface, so note that `HTTPError` subclasses `URLError` and has to be tested
-first or a 400 gets misreported as an outage. A trace that will not replay is
-also never failed over: a weaker model is not the fix and it doubles the bill.
-A bring-your-own key pins OpenAI, so a BYO request can never spend our NVIDIA
-credit. All four rules have tests.
+Failover fires on 429, 5xx, and a reply cut off at the output cap. A 400 is our
+own malformed request and must surface, so note that `HTTPError` subclasses
+`URLError` and has to be tested first or a 400 gets misreported as an outage. A
+trace that will not replay is never failed over: a weaker model is not the fix
+and it doubles the bill. Truncation is the one exception and it is not really
+one — the model stopped mid-trace, so there is no trace to judge, and how much
+of the cap a model spends on hidden reasoning before writing a token of JSON
+differs per provider. That is why `GenerationError` carries a `retry` flag which
+is False everywhere except there. A bring-your-own key pins OpenAI, so a BYO
+request can never spend our NVIDIA credit. All five rules have tests.
 
 The one real asymmetry: `strict: true` is an OpenAI feature. On NIM the JSON
 schema is a request rather than a contract, so malformed JSON is possible again.
