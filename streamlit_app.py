@@ -65,26 +65,38 @@ def deref(val, nodes):
 
 # ---------------------------------------------------------------- rendering
 
-CSS = """
+# The palette is app/globals.css, so the two front ends read as one product.
+BG, PANEL, LINE, FG, DIM, ACCENT, HOT = (
+    "#0e1116", "#161b22", "#262d38", "#e6edf3", "#8b949e", "#58a6ff", "#f0883e",
+)
+
+CSS = f"""
 <style>
-.lv-src { font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
-          border:1px solid #e3e3e6; border-radius:8px; overflow-x:auto; }
-.lv-src div { padding:1px 12px; white-space:pre; }
-.lv-src div.on { background:#fff4d6; box-shadow:inset 3px 0 0 #e0a800; }
-.lv-note { border-left:3px solid #e0a800; padding:6px 12px; margin:10px 0;
-           background:#fffaf0; font-size:14px; }
-.lv-cells { display:flex; flex-wrap:wrap; gap:4px; margin:2px 0 10px; }
-.lv-cell { min-width:38px; text-align:center; border:1px solid #d9d9de;
-           border-radius:6px; padding:4px 6px; font:13px ui-monospace, monospace; }
-.lv-cell.mark { background:#ffe9a8; border-color:#e0a800; }
-.lv-idx { font-size:10px; color:#8a8a92; }
-.lv-ptr { font-size:11px; color:#b26a00; height:14px; }
-.lv-name { font:12px ui-monospace, monospace; color:#5a5a63; margin-top:6px; }
-.lv-name b { color:#111; }
-.lv-grid { border-collapse:collapse; margin:2px 0 10px; }
-.lv-grid td { border:1px solid #d9d9de; padding:4px 9px; text-align:center;
-              font:13px ui-monospace, monospace; }
-.lv-grid td.mark { background:#ffe9a8; }
+.lv-src {{ font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+          border:1px solid {LINE}; border-radius:10px; background:{PANEL};
+          padding:6px 0; overflow-x:auto; color:{FG}; }}
+.lv-src div {{ padding:1px 14px; white-space:pre; }}
+.lv-src div.on {{ background:#1b2836; box-shadow:inset 3px 0 0 {ACCENT}; }}
+.lv-note {{ border:1px solid {LINE}; border-left:3px solid {HOT}; border-radius:10px;
+           padding:12px 16px; margin:12px 0; background:{PANEL}; color:{FG};
+           font-size:14px; }}
+.lv-cells {{ display:flex; flex-wrap:wrap; gap:5px; margin:2px 0 12px; }}
+.lv-cell {{ min-width:40px; text-align:center; border:1px solid {LINE};
+           border-radius:7px; padding:5px 8px; background:{PANEL}; color:{FG};
+           font:13px ui-monospace, monospace; }}
+.lv-cell.mark {{ border-color:{HOT}; color:{HOT}; background:#f0883e14; }}
+.lv-idx {{ font-size:10px; color:{DIM}; background:none !important; }}
+.lv-ptr {{ font-size:11px; color:{HOT}; height:15px; background:none !important; }}
+.lv-name {{ font:12px ui-monospace, monospace; color:{DIM}; margin-top:8px; }}
+.lv-name b {{ color:{FG}; }}
+.lv-grid {{ border-collapse:separate; border-spacing:4px; margin:2px 0 12px; }}
+.lv-grid td {{ border:1px solid {LINE}; border-radius:7px; padding:5px 10px;
+              text-align:center; background:{PANEL}; color:{FG};
+              font:13px ui-monospace, monospace; }}
+.lv-grid td.mark {{ border-color:{HOT}; color:{HOT}; background:#f0883e14; }}
+.lv-ret {{ display:inline-block; border:1px solid #2b4d75; border-radius:999px;
+          padding:4px 12px; margin-top:10px; color:{ACCENT}; background:#58a6ff14;
+          font:13px ui-monospace, monospace; }}
 </style>
 """
 
@@ -161,18 +173,19 @@ def nodes_svg(nodes, labels):
                 x1, y1 = px[child]
                 edges.append(
                     f'<line x1="{x0}" y1="{y0}" x2="{x1}" y2="{y1}" '
-                    f'stroke="#b9b9c0" stroke-width="1.5" />'
+                    f'stroke="{LINE}" stroke-width="1.5" />'
                 )
         tags = labels.get(nid, [])
-        fill = "#ffe9a8" if tags else "#fff"
+        fill = "#58a6ff26" if tags else PANEL
         circles.append(
-            f'<circle cx="{x0}" cy="{y0}" r="{r}" fill="{fill}" stroke="#8a8a92" />'
-            f'<text x="{x0}" y="{y0 + 4}" text-anchor="middle">'
+            f'<circle cx="{x0}" cy="{y0}" r="{r}" fill="{fill}" '
+            f'stroke="{ACCENT if tags else LINE}" />'
+            f'<text x="{x0}" y="{y0 + 4}" text-anchor="middle" fill="{FG}">'
             f'{html.escape(str(node.get("val")))}</text>'
         )
         if tags:
             circles.append(
-                f'<text x="{x0}" y="{y0 - r - 6}" text-anchor="middle" fill="#b26a00">'
+                f'<text x="{x0}" y="{y0 - r - 6}" text-anchor="middle" fill="{ACCENT}">'
                 f'{html.escape(" ".join(tags))}</text>'
             )
     w = max(x for x, _ in px.values()) + pad + r
@@ -197,7 +210,7 @@ def calls_svg(calls):
             x1, y1 = px[parent]
             parts.append(
                 f'<line x1="{x0}" y1="{y0}" x2="{x1}" y2="{y1 + 10}" '
-                f'stroke="#b9b9c0" stroke-width="1.5" />'
+                f'stroke="{LINE}" stroke-width="1.5" />'
             )
         done = c.get("status") != "active"
         args = ", ".join(f"{k}={v}" for k, v in (c.get("args") or {}).items())
@@ -206,8 +219,10 @@ def calls_svg(calls):
             text += f' → {c["ret"]}'
         parts.append(
             f'<rect x="{x0}" y="{y0 - 12}" width="{sx - 14}" height="24" rx="6" '
-            f'fill="{"#f2f2f4" if done else "#ffe9a8"}" stroke="#c9c9d0" />'
-            f'<text x="{x0 + 8}" y="{y0 + 4}">{html.escape(text[:22])}</text>'
+            f'fill="{PANEL if done else "#58a6ff26"}" '
+            f'stroke="{LINE if done else ACCENT}" />'
+            f'<text x="{x0 + 8}" y="{y0 + 4}" fill="{DIM if done else FG}">'
+            f'{html.escape(text[:22])}</text>'
         )
     w = max(x for x, _ in px.values()) + sx
     h = max(y for _, y in px.values()) + pad + 16
@@ -235,7 +250,7 @@ def graph_svg(adj, coords, labels, marked):
             if b:
                 edges.append(
                     f'<line x1="{a[0]}" y1="{a[1]}" x2="{b[0]}" y2="{b[1]}" '
-                    f'stroke="#b9b9c0" stroke-width="1.5" />'
+                    f'stroke="{LINE}" stroke-width="1.5" />'
                 )
     for k in keys:
         a = px.get(str(k))
@@ -244,13 +259,15 @@ def graph_svg(adj, coords, labels, marked):
         hot = str(k) in marked
         circles.append(
             f'<circle cx="{a[0]}" cy="{a[1]}" r="19" '
-            f'fill="{"#ffe9a8" if hot else "#fff"}" stroke="#8a8a92" />'
-            f'<text x="{a[0]}" y="{a[1] + 4}" text-anchor="middle">{html.escape(str(k))}</text>'
+            f'fill="{"#f0883e26" if hot else PANEL}" '
+            f'stroke="{HOT if hot else LINE}" />'
+            f'<text x="{a[0]}" y="{a[1] + 4}" text-anchor="middle" fill="{FG}">'
+            f'{html.escape(str(k))}</text>'
         )
         tag = labels.get(str(k))
         if tag is not None:
             circles.append(
-                f'<text x="{a[0]}" y="{a[1] - 25}" text-anchor="middle" fill="#b26a00">'
+                f'<text x="{a[0]}" y="{a[1] - 25}" text-anchor="middle" fill="{HOT}">'
                 f'{html.escape(str(tag))}</text>'
             )
     size = 2 * (r + pad)
@@ -415,7 +432,11 @@ def main():
                     unsafe_allow_html=True,
                 )
                 if i == len(steps) - 1:
-                    st.success(f'returns {json.dumps(variant["result"])}')
+                    st.markdown(
+                        f'<div class="lv-ret">return '
+                        f'{html.escape(json.dumps(variant["result"]))}</div>',
+                        unsafe_allow_html=True,
+                    )
 
 
 if __name__ == "__main__":
