@@ -150,6 +150,7 @@ export function SolveForm() {
       <textarea
         className="ask"
         rows={6}
+        aria-label="Problem statement"
         placeholder="Paste a problem statement. Constraints and worked examples make the trace better."
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
@@ -176,6 +177,7 @@ export function SolveForm() {
             <input
               className="tag"
               type="password"
+              aria-label="Your own OpenAI key"
               placeholder="sk-… your own OpenAI key"
               value={byo}
               onChange={(e) => saveByo(e.target.value)}
@@ -219,6 +221,7 @@ export function SpendDash() {
         <input
           className="tag"
           type="password"
+          aria-label="Admin secret"
           placeholder="admin secret"
           value={secret}
           onChange={(e) => setSecret(e.target.value)}

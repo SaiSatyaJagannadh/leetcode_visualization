@@ -57,6 +57,11 @@ export default function Viewer({ problem, keys = true }: { problem: Problem; key
   useEffect(() => {
     if (!keys) return;
     const onKey = (e: KeyboardEvent) => {
+      // The shortcuts are on window, so without this space would toggle play
+      // instead of pressing whichever tab or player button has focus, and the
+      // slider's own arrow keys would never reach it.
+      const el = e.target as HTMLElement | null;
+      if (el?.closest("button, a, input, textarea, select, [contenteditable]")) return;
       if (e.key === "ArrowRight") setStep((s) => Math.min(s + 1, last));
       else if (e.key === "ArrowLeft") setStep((s) => Math.max(s - 1, 0));
       else if (e.key === " ") setPlaying((p) => !p);
@@ -65,7 +70,7 @@ export default function Viewer({ problem, keys = true }: { problem: Problem; key
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [last]);
+  }, [keys, last]);
 
   return (
     <>
@@ -113,22 +118,30 @@ export default function Viewer({ problem, keys = true }: { problem: Problem; key
         </div>
       </div>
 
-      <div className={steps[at].note ? "note" : "note empty"}>{steps[at].note ?? "…"}</div>
+      {/* The note is the teaching content, so it has to be announced as the
+          player advances rather than changing silently. */}
+      <div className={steps[at].note ? "note" : "note empty"} aria-live="polite">
+        {steps[at].note ?? "…"}
+      </div>
 
       <div className="player">
-        <button onClick={() => jump(0)} title="First step">
+        <button onClick={() => jump(0)} aria-label="First step" title="First step">
           ⏮
         </button>
-        <button onClick={() => jump(at - 1)} title="Back">
+        <button onClick={() => jump(at - 1)} aria-label="Previous step" title="Back">
           ◀
         </button>
-        <button onClick={() => setPlaying((p) => !p)} title="Play/pause">
+        <button
+          onClick={() => setPlaying((p) => !p)}
+          aria-label={playing ? "Pause" : "Play"}
+          title={playing ? "Pause" : "Play"}
+        >
           {playing ? "❚❚" : "▶"}
         </button>
-        <button onClick={() => jump(at + 1)} title="Forward">
+        <button onClick={() => jump(at + 1)} aria-label="Next step" title="Forward">
           ▶
         </button>
-        <button onClick={() => jump(last)} title="Last step">
+        <button onClick={() => jump(last)} aria-label="Last step" title="Last step">
           ⏭
         </button>
         <input
@@ -136,6 +149,8 @@ export default function Viewer({ problem, keys = true }: { problem: Problem; key
           min={0}
           max={last}
           value={at}
+          aria-label="Step"
+          aria-valuetext={`Step ${at + 1} of ${last + 1}`}
           onChange={(e) => jump(Number(e.target.value))}
         />
         <span className="count">
