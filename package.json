@@ -8,7 +8,7 @@
     "start": "next start",
     "trace": "python3 tracer/build.py",
     "check": "python3 pipeline/check.py && pnpm run schema -- --check",
-    "test": "python3 pipeline/test_solve.py",
+    "test": "python3 pipeline/test_solve.py && python3 pipeline/check_streamlit.py",
     "schema": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON pipeline/schema-json.mts"
   },
   "dependencies": {

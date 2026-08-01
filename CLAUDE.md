@@ -9,7 +9,7 @@ pnpm dev              # Next.js dev server (uses .next)
 pnpm trace            # regenerate every trace in traces/ from content/problems/
 python3 tracer/build.py two-sum reverse-linked-list   # regenerate only these slugs
 pnpm check            # correctness gate: approaches, content sweep, schema freshness
-pnpm test             # gate-order / quota / redaction / generation tests for /api/solve
+pnpm test             # /api/solve gates and generation, then the Streamlit app
 pnpm schema           # regenerate prompts/solve-schema.json from lib/schema.ts
 pnpm build            # schema freshness check, pnpm trace, then `next build` into .next-build
 ```
@@ -17,8 +17,8 @@ pnpm build            # schema freshness check, pnpm trace, then `next build` in
 `pnpm build` writes to `.next-build` (via `NEXT_DIST`) on purpose — a production
 build must not clobber a running dev server's `.next`.
 
-There is no test *framework* — no pytest, no vitest, no fixtures. There are two
-suites, both plain scripts of `assert`-style checks that exit non-zero:
+There is no test *framework* — no pytest, no vitest, no fixtures. There are three
+suites, all plain scripts of `assert`-style checks that exit non-zero:
 
 - `pipeline/check.py` (`pnpm check`) asserts every approach of a problem returns
   the same result on every variant, so no expected outputs are maintained
@@ -27,6 +27,12 @@ suites, both plain scripts of `assert`-style checks that exit non-zero:
   the spend cap, BYO-key redaction, and the generation layer — wire round-trip,
   semantic validation, the repair cap and prompt ordering. Every check there
   runs offline; `_gen.call` is the only place an HTTP request happens.
+- `pipeline/check_streamlit.py` (also `pnpm test`) replays every trace through
+  the Streamlit reader, then drives the app itself with `AppTest`. The second
+  half exists because the first half only tests pure functions, and the app has
+  twice crashed on Streamlit's rules about *when* session state may be written —
+  the functions were fine, the script was not. A click that raises is a failed
+  check rather than a red box on the deployed site.
 
 Never weaken an assertion to make something pass — fix the source.
 

@@ -707,6 +707,16 @@ def _close():
     st.session_state.playing = False
 
 
+# `view` is deliberately NOT the radio's key. Asking for a problem that is
+# already traced has to switch the view from inside the Ask page — after the
+# radio has been instantiated — and Streamlit refuses to let a widget's key be
+# written once its widget exists. So `view` is an ordinary session value and the
+# radio is a view of it, seeded each run and copied back on change. Same
+# arrangement as the player's position and its slider, for the same reason.
+def _nav():
+    st.session_state.view = st.session_state.nav
+
+
 def pill(text, kind=""):
     return f'<span class="lv-pill {kind}">{html.escape(text)}</span>'
 
@@ -775,7 +785,8 @@ def ask_view(problems):
             st.caption(f'Import failed: {st.session_state.llm_error}')
 
     mode = st.segmented_control(
-        "mode", ["Explain", "Trace it"], default="Explain", label_visibility="collapsed"
+        "mode", ["Explain", "Trace it"], default="Explain", key="askmode",
+        label_visibility="collapsed",
     )
     st.caption(
         "**Explain** answers in words. **Trace it** generates a step-by-step "
@@ -1002,8 +1013,11 @@ def main():
 
     with st.sidebar:
         st.markdown('<div class="lv-brand">LeetViz</div>', unsafe_allow_html=True)
-        st.radio("View", ["Problems", "Ask"], key="view", horizontal=True,
-                 label_visibility="collapsed")
+        # Seeded before the widget exists, the only moment Streamlit allows a
+        # widget's key to be written.
+        st.session_state.nav = st.session_state.view
+        st.radio("View", ["Problems", "Ask"], key="nav", horizontal=True,
+                 on_change=_nav, label_visibility="collapsed")
         if st.session_state.view == "Problems":
             st.caption(f"{len(ready)} problems traced line by line, replayed from JSON")
             watched = len(st.session_state.seen)

@@ -79,6 +79,50 @@ if got is not None or "Sliding Window" not in reply:
     fails.append(f"resolve('sliding window') should list the pattern, gave {got!r}")
 
 print(f"ask box: {len(cases) + 1} queries")
+
+
+# Everything above tests pure functions, which is exactly the class of bug it
+# cannot catch: the app has now crashed twice on Streamlit's own rules about
+# when session state may be written, and both times the functions were fine and
+# the *script* was not. AppTest runs the real script, so a click that raises is
+# a failed check rather than a red box on the deployed site.
+from streamlit.testing.v1 import AppTest  # noqa: E402
+
+app = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=120).run()
+
+
+def ok(name, cond, detail=""):
+    if not cond:
+        fails.append(f"{name} {detail}".strip())
+
+
+ok("the roadmap renders", not app.exception, str(app.exception))
+ok("every problem has a row", len(app.button) == len(index["problems"]), str(len(app.button)))
+
+app.button(key="go_two-sum").click().run()
+ok("a row click opens that problem", not app.exception and app.session_state.slug == "two-sum")
+ok("opening a problem counts it as watched", "two-sum" in app.session_state.seen)
+ok("the player renders its transport", any(b.key.startswith("tp_") for b in app.button))
+
+app.button(key="nav_next").click().run()
+ok("next walks to the following problem",
+   not app.exception and app.session_state.slug != "two-sum")
+app.button(key="nav_back").click().run()
+ok("back returns to the roadmap", not app.exception and not app.session_state.open)
+
+# The crash this section was written for: asking for a problem that is already
+# traced switches the view from inside the Ask page, after the radio that shows
+# the view has been instantiated.
+app.radio[0].set_value("Ask").run()  # positional: the fix is what names this key
+ok("the ask view renders", not app.exception, str(app.exception))
+app.session_state.askmode = "Trace it"
+app.chat_input[0].set_value("leetcode 1").run()
+ok("a traced problem asked for by number does not crash", not app.exception, str(app.exception))
+ok("...and lands on the problem", app.session_state.view == "Problems"
+   and app.session_state.open and app.session_state.slug == "two-sum",
+   f'view={app.session_state.view} open={app.session_state.open}')
+
+print("app: 9 interactions")
 for f in fails:
     print("  FAIL", f)
 if fails:
