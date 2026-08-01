@@ -9,7 +9,9 @@ so a step shown here is the step the React player shows.
 import difflib
 import html
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
 import streamlit as st
@@ -454,6 +456,92 @@ def resolve(query, problems):
     return None, "No match. Try a LeetCode number, a title, or a pattern name."
 
 
+# ---------------------------------------------------------------- llm
+
+# Their keys, their public URL: a stranger must not be able to spend the whole
+# balance by holding down enter. Traces are the only thing here that costs real
+# money, so they are what is counted.
+MAX_GEN_PER_SESSION = int(os.environ.get("LEETVIZ_MAX_GENERATIONS", "3"))
+
+_CHAT_SYSTEM = (
+    "You explain algorithms and data structures for LeetViz, a site that shows "
+    "traced solutions step by step. Answer in at most 150 words, plainly, and "
+    "say the reasoning rather than narrating syntax. Give complexity when it is "
+    "relevant. Never reproduce a LeetCode or NeetCode problem statement "
+    "verbatim — restate it in your own words. If you do not know, say so."
+)
+
+
+@st.cache_resource
+def generator():
+    """The one generation layer, imported from api/. There is exactly one prompt,
+    one schema and one repair ladder in this repo; a second copy here would drift
+    from the deployed one and produce traces this player cannot replay.
+
+    Secrets are copied into os.environ first because api/_gen.py reads all of its
+    configuration from the environment by design — Provider builds its URL at
+    import time, so this has to happen before the import.
+    """
+    try:
+        for key, value in st.secrets.items():
+            if isinstance(value, str) and key not in os.environ:
+                os.environ[key] = value
+    except Exception:  # noqa: BLE001 — no secrets.toml locally is not an error
+        pass
+    sys.path.insert(0, str(ROOT / "api"))
+    import _gen
+
+    return _gen
+
+
+def providers():
+    """Ready provider ids, or [] when no key/model pair is configured."""
+    try:
+        return [p.id for p in generator().chain("GENERATE")]
+    except Exception as e:  # noqa: BLE001 — a bad import must not blank the page
+        st.session_state.llm_error = f"{type(e).__name__}: {e}"
+        return []
+
+
+def answer(question, history):
+    """A plain chat answer.
+
+    Reuses _gen's transport, chain order and retry rules rather than reimplementing
+    them: the first attempt at this failed on an OpenAI balance that has been
+    exhausted for days, because it picked a provider instead of walking the chain.
+    Failover fires on the same conditions generation uses, and a provider whose
+    account is empty gets marked dead for the process the same way.
+    """
+    gen = generator()
+    provs = gen.chain("CHEAP") or gen.chain("GENERATE")
+    if not provs:
+        return None, "No model configured. Add the keys below to Streamlit secrets."
+    msgs = [{"role": "system", "content": _CHAT_SYSTEM}]
+    for q, a in history[-4:][::-1]:
+        msgs += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
+    msgs.append({"role": "user", "content": question})
+
+    for i, prov in enumerate(provs):
+        try:
+            raw = gen._post(
+                {
+                    "model": prov.model("CHEAP") or prov.model("GENERATE"),
+                    "messages": msgs,
+                    "max_completion_tokens": 700,
+                },
+                prov.key,
+                prov.url,
+                timeout=90,
+            )
+            text = ((raw.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            return prov.id, text.strip() or "(empty answer)"
+        except Exception as e:  # noqa: BLE001 — re-raised unless a fallback exists
+            gen._mark_if_dead(prov, e)
+            if not (i + 1 < len(provs) and gen._retryable(e)):
+                raise
+    raise RuntimeError("no provider answered")
+
+
 # ---------------------------------------------------------------- player
 
 TICK = 0.75  # seconds per step when playing, matching the React player's 650ms
@@ -543,48 +631,146 @@ def pick(what, options, scope):
     return options[labels.index(chosen)] if chosen in labels else options[0]
 
 
-def main():
-    st.set_page_config(page_title="LeetViz", page_icon="◆", layout="wide")
-    st.markdown(CSS, unsafe_allow_html=True)
+def player(problem, scope):
+    """Header-free renderer for one problem: approach, variant, autoplaying stage."""
+    approach = pick("approach", problem["approaches"], scope)
+    st.markdown(
+        f'<div class="lv-cx">time {approach["complexity"]["time"]} · '
+        f'space {approach["complexity"]["space"]}</div>',
+        unsafe_allow_html=True,
+    )
+    variant = pick("variant", approach["variants"], f'{scope}:{approach["id"]}')
+    skey = f'{scope}:{approach["id"]}:{variant["id"]}'
+    # run_every is read when the decorator is applied, so applying it per run is
+    # what lets play and pause actually start and stop the timer.
+    st.fragment(run_every=TICK if st.session_state.playing else None)(stage)(
+        approach, variant, skey
+    )
 
-    index = load_index()
-    problems = index["problems"]
-    ready = [p for p in problems if p["ready"]]
-    st.session_state.setdefault("slug", ready[0]["slug"])
-    st.session_state.setdefault("playing", False)
-    st.session_state.setdefault("chat", [])
 
-    # Docked at the bottom of the view wherever it is called, so handling it
-    # first means a resolved problem renders on this run rather than the next.
-    asked = st.chat_input("Ask for a problem — “leetcode 25”, “two sum”, “sliding window”")
-    if asked:
-        slug, reply = resolve(asked, problems)
-        st.session_state.chat = [(asked, reply)] + st.session_state.chat[:4]
-        if slug:
-            st.session_state.slug = slug
-            st.session_state.pattern = "All"  # or the picker would not list it
-            st.session_state.playing = False
+SETUP = """
+Add these to **Manage app → Settings → Secrets**, then rerun. Any one provider
+is enough; the chain tries them in order and fails over.
 
-    with st.sidebar:
-        st.markdown('<div class="lv-brand">LeetViz</div>', unsafe_allow_html=True)
-        st.caption(f"{len(ready)} problems traced line by line, replayed from JSON")
-        patterns = ["All"] + [x for x in index["patterns"] if any(p["pattern"] == x for p in ready)]
-        st.session_state.setdefault("pattern", "All")
-        pattern = st.selectbox("Pattern", patterns, key="pattern")
-        pool = [p for p in ready if pattern == "All" or p["pattern"] == pattern]
-        if st.session_state.slug not in {p["slug"] for p in pool}:
-            st.session_state.slug = pool[0]["slug"]
-        by_slug = {p["slug"]: p for p in pool}
-        st.selectbox(
-            "Problem",
-            list(by_slug),
-            key="slug",
-            format_func=lambda s: f'{by_slug[s]["leetcode"]}. {by_slug[s]["title"]}',
+```toml
+GEMINI_API_KEY = "AIza…"
+GEMINI_MODEL_GENERATE = "gemini-2.5-flash"
+GEMINI_MODEL_CHEAP = "gemini-2.5-flash"
+
+# optional extras, same shape
+# OPENAI_API_KEY = "sk-…"
+# OPENAI_MODEL_GENERATE = "gpt-5"
+# NVIDIA_API_KEY = "nvapi-…"
+# NVIDIA_MODEL_GENERATE = "openai/gpt-oss-20b"
+SOLVE_PROVIDER_ORDER = "google,openai,nvidia"
+```
+"""
+
+
+def ask_view(problems):
+    """The chatbot. Two send modes, because one of them costs real money."""
+    st.markdown('<div class="lv-title">Ask</div>', unsafe_allow_html=True)
+    live = providers()
+    if live:
+        st.markdown(
+            pill(" · ".join(live))
+            + pill(f"{MAX_GEN_PER_SESSION - st.session_state.made} traces left this session"),
+            unsafe_allow_html=True,
         )
-        for q, reply in st.session_state.chat:
-            st.markdown(f'<div class="lv-ask">{html.escape(q)}</div>', unsafe_allow_html=True)
-            st.markdown(reply)
+    else:
+        st.warning("No model is configured yet, so only the 150 traced problems answer.")
+        st.markdown(SETUP)
+        if st.session_state.get("llm_error"):
+            st.caption(f'Import failed: {st.session_state.llm_error}')
 
+    mode = st.segmented_control(
+        "mode", ["Explain", "Trace it"], default="Explain", label_visibility="collapsed"
+    )
+    st.caption(
+        "**Explain** answers in words. **Trace it** generates a step-by-step "
+        "visualization in the same shape as the 150 — two approaches, three "
+        "variants, narrated line by line."
+    )
+
+    asked = st.chat_input("Ask anything, or paste a problem statement to trace")
+    if asked:
+        # A problem already in the corpus is answered from disk. Paying a model
+        # to redo work that is sitting in traces/ would be the expensive way to
+        # get a worse answer.
+        slug, reply = resolve(asked, problems)
+        if slug and mode == "Trace it":
+            st.session_state.chat = [(asked, reply + " Already traced — shown below.")] + \
+                st.session_state.chat[:9]
+            st.session_state.slug = slug
+            st.session_state.pattern = "All"
+            st.session_state.view = "Library"
+            st.rerun()
+        elif mode == "Trace it":
+            if not live:
+                st.session_state.chat = [(asked, "No model configured — see the setup above.")] + \
+                    st.session_state.chat[:9]
+            elif st.session_state.made >= MAX_GEN_PER_SESSION:
+                st.session_state.chat = [
+                    (asked, f"Session limit of {MAX_GEN_PER_SESSION} generations reached. "
+                            "Reload to start a new session.")
+                ] + st.session_state.chat[:9]
+            else:
+                with st.spinner("Tracing — this runs the real generator, ~30-60s"):
+                    try:
+                        problem, cost, _usage = generator().generate(asked)
+                        st.session_state.made += 1
+                        st.session_state.traced = problem
+                        st.session_state.chat = [
+                            (asked, f'Traced **{problem["title"]}** — '
+                                    f'{len(problem["approaches"])} approaches. Below.')
+                        ] + st.session_state.chat[:9]
+                    except Exception as e:  # noqa: BLE001 — the reason must not leak a key
+                        # The validator's reason is the useful part ("the ops and
+                        # the result disagree" tells you the model, not the app,
+                        # was wrong). It is our own text, but it goes through the
+                        # redactor anyway — upstream prose can quote a key.
+                        why = generator()._lib.redact(str(e))[:400]
+                        st.session_state.chat = [
+                            (asked, f"**Generation failed.** {type(e).__name__}: {why}\\n\\n"
+                                    "A trace that will not replay is refused rather than "
+                                    "shown. A stronger `*_MODEL_GENERATE` is the usual fix.")
+                        ] + st.session_state.chat[:9]
+        else:
+            with st.spinner("Thinking"):
+                try:
+                    who, text = answer(asked, st.session_state.chat)
+                    if slug:
+                        text += f"\n\n*{reply} It is in the library — switch to Library to watch it.*"
+                    st.session_state.chat = [(asked, text)] + st.session_state.chat[:9]
+                except Exception as e:  # noqa: BLE001
+                    st.session_state.chat = [
+                        (asked, f"That call failed: {type(e).__name__}.")
+                    ] + st.session_state.chat[:9]
+        st.rerun()
+
+    made = st.session_state.get("traced")
+    if made:
+        st.divider()
+        st.markdown(
+            f'<div class="lv-title">{html.escape(made["title"])}</div>', unsafe_allow_html=True
+        )
+        st.markdown(
+            pill(made.get("difficulty") or "", made.get("difficulty") or "")
+            + pill(made.get("pattern") or "generated")
+            + pill("generated, not committed"),
+            unsafe_allow_html=True,
+        )
+        if made.get("prompt"):
+            st.markdown(f'<p class="lv-prompt">{html.escape(made["prompt"])}</p>',
+                        unsafe_allow_html=True)
+        player(made, "generated")
+
+    for q, a in st.session_state.chat:
+        st.markdown(f'<div class="lv-ask">{html.escape(q)}</div>', unsafe_allow_html=True)
+        st.markdown(a)
+
+
+def library_view(index, problems, ready):
     choice = next(p for p in problems if p["slug"] == st.session_state.slug)
     trace = load_trace(choice["slug"])
 
@@ -616,23 +802,51 @@ def main():
             for c in trace.get("constraints", []):
                 st.markdown(f"- {c}")
 
-    # Deliberately not st.tabs: tabs render every approach on every run, so each
-    # one would build a fragment from the same function and they would collide —
-    # the auto-rerun timer then never fires. One picker, one stage, one fragment.
-    approach = pick("approach", trace["approaches"], choice["slug"])
-    st.markdown(
-        f'<div class="lv-cx">time {approach["complexity"]["time"]} · '
-        f'space {approach["complexity"]["space"]}</div>',
-        unsafe_allow_html=True,
-    )
-    variant = pick("variant", approach["variants"], f'{choice["slug"]}:{approach["id"]}')
-    skey = f'{choice["slug"]}:{approach["id"]}:{variant["id"]}'
-    # run_every is read when the decorator is applied, so applying it per run is
-    # what lets play and pause actually start and stop the timer.
-    st.fragment(run_every=TICK if st.session_state.playing else None)(stage)(
-        approach, variant, skey
-    )
+    player(trace, choice["slug"])
     st.caption("Press ▶ to watch it run. Every step is the real traced state, not an animation.")
+
+
+def main():
+    st.set_page_config(page_title="LeetViz", page_icon="◆", layout="wide")
+    st.markdown(CSS, unsafe_allow_html=True)
+
+    index = load_index()
+    problems = index["problems"]
+    ready = [p for p in problems if p["ready"]]
+    st.session_state.setdefault("slug", ready[0]["slug"])
+    st.session_state.setdefault("playing", False)
+    st.session_state.setdefault("chat", [])
+    st.session_state.setdefault("made", 0)
+    st.session_state.setdefault("view", "Library")
+
+    with st.sidebar:
+        st.markdown('<div class="lv-brand">LeetViz</div>', unsafe_allow_html=True)
+        st.radio("View", ["Library", "Ask"], key="view", horizontal=True,
+                 label_visibility="collapsed")
+        if st.session_state.view == "Library":
+            st.caption(f"{len(ready)} problems traced line by line, replayed from JSON")
+            patterns = ["All"] + [
+                x for x in index["patterns"] if any(p["pattern"] == x for p in ready)
+            ]
+            st.session_state.setdefault("pattern", "All")
+            pattern = st.selectbox("Pattern", patterns, key="pattern")
+            pool = [p for p in ready if pattern == "All" or p["pattern"] == pattern]
+            if st.session_state.slug not in {p["slug"] for p in pool}:
+                st.session_state.slug = pool[0]["slug"]
+            by_slug = {p["slug"]: p for p in pool}
+            st.selectbox(
+                "Problem",
+                list(by_slug),
+                key="slug",
+                format_func=lambda s: f'{by_slug[s]["leetcode"]}. {by_slug[s]["title"]}',
+            )
+        else:
+            st.caption("Ask in words, or generate a trace for a problem outside the 150.")
+
+    if st.session_state.view == "Ask":
+        ask_view(problems)
+    else:
+        library_view(index, problems, ready)
 
 
 if __name__ == "__main__":

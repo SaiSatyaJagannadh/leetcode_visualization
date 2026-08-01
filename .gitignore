@@ -444,6 +444,9 @@ graphify-out/
 .env.bak*
 .env.local
 .env.*.local
+# Streamlit reads secrets from here, so it holds the same keys .env does.
+# .streamlit/config.toml IS tracked — it carries the theme and no values.
+.streamlit/secrets.toml
 
 # Vercel
 .vercel

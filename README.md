@@ -37,3 +37,40 @@ on every push to `main`. To stand up another copy: https://share.streamlit.io �
 
 The Next.js site deploys separately to Vercel (`npx vercel --prod`), which is
 what serves `/solve` and `/admin/spend`.
+
+## The Ask view (optional — needs a model key)
+
+Without secrets the Streamlit app still works: the 150 traces and the lookup box
+need no network at all. Adding a key turns on the **Ask** view, which has two
+modes:
+
+- **Explain** — a plain answer in words, from the cheap model.
+- **Trace it** — generates a step-by-step visualization in the same shape as the
+  150, using `api/_gen.py`. Same prompt, same schema, same repair ladder as the
+  deployed `/solve`: there is one generator in this repo, not two.
+
+Add these under **Manage app → Settings → Secrets** on Streamlit Cloud (locally,
+`.streamlit/secrets.toml`, which is gitignored). Any one provider is enough — the
+chain tries them in order and fails over on 429 and 5xx:
+
+```toml
+GEMINI_API_KEY = "AIza…"
+GEMINI_MODEL_GENERATE = "gemini-2.5-flash"
+GEMINI_MODEL_CHEAP = "gemini-2.5-flash"
+SOLVE_PROVIDER_ORDER = "google,openai,nvidia"
+
+# OPENAI_API_KEY = "sk-…"
+# OPENAI_MODEL_GENERATE = "gpt-5"
+# NVIDIA_API_KEY = "nvapi-…"
+# NVIDIA_MODEL_GENERATE = "openai/gpt-oss-20b"
+```
+
+Two things to know before you turn it on:
+
+- **It spends your money.** `LEETVIZ_MAX_GENERATIONS` (default 3) caps traces per
+  browser session, because the URL is public. Explain answers are cheap; traces
+  are not.
+- **A weak `*_MODEL_GENERATE` will fail.** The trace is validated by replaying it
+  the way the player does, and one that does not replay is refused after two
+  repair attempts rather than shown. On `gemini-2.5-flash` that happens on
+  problems a stronger model handles.
