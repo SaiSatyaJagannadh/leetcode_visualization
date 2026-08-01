@@ -81,6 +81,23 @@ if got is not None or "Sliding Window" not in reply:
 print(f"ask box: {len(cases) + 1} queries")
 
 
+# The 150 are built by tracer/build.py and their viz specs are always honest.
+# A generated trace writes its own, and gemini has declared `grid` on a flat
+# list — which used to send an int through the row loop and take the whole page
+# down. The reader must render something sane for any kind on any value.
+for spec, state in (
+    ({"nums": "grid"}, {"nums": [1, 2, 3]}),          # rows that are not rows
+    ({"s": "grid"}, {"s": ["ab", "cd"]}),             # rows of characters
+    ({"n": "node"}, {"n": 5}),                        # a counter labelled a node
+    ({"g": "graph"}, {"g": []}),                      # an empty adjacency list
+    ({"x": "heap"}, {"x": None}),
+):
+    try:
+        render_state(state, spec, {}, set())
+    except Exception as e:  # noqa: BLE001 — any crash is the failure
+        fails.append(f"viz {spec} on {state} crashed the reader: {type(e).__name__}: {e}")
+
+
 # Everything above tests pure functions, which is exactly the class of bug it
 # cannot catch: the app has now crashed twice on Streamlit's own rules about
 # when session state may be written, and both times the functions were fine and
@@ -110,19 +127,27 @@ ok("next walks to the following problem",
 app.button(key="nav_back").click().run()
 ok("back returns to the roadmap", not app.exception and not app.session_state.open)
 
-# The crash this section was written for: asking for a problem that is already
-# traced switches the view from inside the Ask page, after the radio that shows
-# the view has been instantiated.
+# Asking for one of the 150 by name must PLAY it, in the Ask view, through the
+# same panel the Problems page uses — not answer in prose and point elsewhere.
+# The player is what makes this site the thing it is; an Ask view that only
+# talks is the bug this asserts against. It also covers the crash that used to
+# happen here, when switching pages wrote a widget's key after instantiation.
 app.radio[0].set_value("Ask").run()  # positional: the fix is what names this key
 ok("the ask view renders", not app.exception, str(app.exception))
 app.session_state.askmode = "Trace it"
 app.chat_input[0].set_value("leetcode 1").run()
 ok("a traced problem asked for by number does not crash", not app.exception, str(app.exception))
-ok("...and lands on the problem", app.session_state.view == "Problems"
-   and app.session_state.open and app.session_state.slug == "two-sum",
-   f'view={app.session_state.view} open={app.session_state.open}')
+ok("...and plays inside the Ask view", app.session_state.shown == "two-sum"
+   and app.session_state.view == "Ask",
+   f'shown={app.session_state.shown} view={app.session_state.view}')
+ok("...through the same player the Problems page uses",
+   any(b.key.startswith("tp_") and "ask:two-sum" in b.key for b in app.button),
+   str([b.key for b in app.button][:4]))
+ok("...with the problem's own title and prompt",
+   any("Two Sum" in m.value for m in app.markdown),
+   "no title")
 
-print("app: 9 interactions")
+print("app: 11 interactions")
 for f in fails:
     print("  FAIL", f)
 if fails:

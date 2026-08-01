@@ -659,6 +659,18 @@ def validate(problem):
                 "pointers); a variant is an input case (typical, edge, worst-case). "
                 "Move it into the variants array of a real approach."
             )
+    # All 150 committed problems use exactly these three variant ids, and the
+    # player labels its tabs with them, so a trace that invents `all_positive`
+    # and `all_negative` reads as a different product even when it replays fine.
+    CANON = ("typical", "edge", "worst-case")
+    for a in problem.get("approaches") or []:
+        ids = tuple(v.get("id") for v in (a.get("variants") or []))
+        if ids and set(ids) != set(CANON):
+            bad.append(
+                THIN + f"approach {a.get('id')!r} uses variant ids {list(ids)}; the "
+                "three are always 'typical', 'edge' and 'worst-case'. Rename them — "
+                "the input can stay exactly as it is, only the id changes."
+            )
     n_ex = len(problem.get("examples") or [])
     if n_ex < 2:
         bad.append(

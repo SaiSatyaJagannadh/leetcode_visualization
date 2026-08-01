@@ -11,8 +11,10 @@ Emit JSON matching the supplied schema. Nothing else.
 A `Problem` holds one or more `approaches`. Each approach is a single Python
 listing (`source`, one string per line, no trailing newlines, no comments that
 explain the answer away) plus `variants` — the same code run on different
-inputs. Convention is three variants with ids `typical`, `edge` and
-`worst-case`.
+inputs. There are always exactly three, and their ids are always `typical`,
+`edge` and `worst-case`. Those three ids are fixed vocabulary, not descriptions:
+an all-negative array is the `edge` or `worst-case` variant, never a variant
+called `all_negative`.
 
 A variant is a list of `steps`. Each step is one executed source line:
 
@@ -126,6 +128,11 @@ or `role:host`, which attaches one variable to another:
 `cells:grid` — coordinates highlighted inside `grid`
 `labels:adj` — per-node labels drawn on the `adj` graph
 `marked:adj` — a visited set drawn on the `adj` graph
+
+`node` means a node in a pointer structure — an entry in `$nodes`. A plain
+number, string or list is never `node`: leaving it unlisted renders it correctly
+by value type, and mislabelling a counter as `node` sends it to the diagram
+renderer, which has no node to draw.
 
 `layout` gives static x/y only for variables the renderer cannot lay out itself,
 which in practice means graphs. Leave it `{"$entries": []}` otherwise.

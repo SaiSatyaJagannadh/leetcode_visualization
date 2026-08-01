@@ -406,8 +406,13 @@ def render_state(state, viz, layout, changed):
             parts.append(graph_svg(val, layout.get(name, {}), tags, marked))
             continue
 
-        is_grid = isinstance(val, list) and val and all(isinstance(r, list) for r in val)
-        if kind == "grid" or is_grid:
+        # `viz` is a declaration, and a generated trace can declare `grid` on a
+        # flat list — gemini just did. Honour it only when the value really has
+        # rows, or grid_html iterates an int and takes the whole page down with
+        # it. A committed trace never hits this; a generated one is not trusted.
+        has_rows = isinstance(val, list) and val and all(isinstance(r, (list, str)) for r in val)
+        is_grid = has_rows and all(isinstance(r, list) for r in val)
+        if is_grid or (kind == "grid" and has_rows):
             marks = set()
             for c in hooks.get("cells", []):
                 coord_pairs(state.get(c), marks)
@@ -459,7 +464,7 @@ def resolve(query, problems):
             if p["leetcode"] == n:
                 return p["slug"], (
                     f'LeetCode {n} is **{p["title"]}** — {p["difficulty"]}, '
-                    f'{p["pattern"]}. Loaded above: press play to watch it run.'
+                    f'{p["pattern"]}.'
                 )
         missing = next((p for p in problems if p["leetcode"] == n), None)
         if missing:
@@ -789,9 +794,9 @@ def ask_view(problems):
         label_visibility="collapsed",
     )
     st.caption(
-        "**Explain** answers in words. **Trace it** generates a step-by-step "
-        "visualization in the same shape as the 150 — two approaches, three "
-        "variants, narrated line by line."
+        "Name any of the 150 — “leetcode 25”, “two sum”, “sliding window” — and it "
+        "plays right here. **Explain** also answers in words; **Trace it** generates "
+        "a new visualization, in the same shape as the 150, for anything outside them."
     )
 
     asked = st.chat_input("Ask anything, or paste a problem statement to trace")
@@ -800,11 +805,16 @@ def ask_view(problems):
         # to redo work that is sitting in traces/ would be the expensive way to
         # get a worse answer.
         slug, reply = resolve(asked, problems)
+        # Whatever the question was, if it named one of the 150 that trace is
+        # what the answer looks like. Showing it here rather than pointing at
+        # another page is the whole point of the Ask view.
+        st.session_state.shown = slug
+        if slug:
+            st.session_state.seen.add(slug)
         if slug and mode == "Trace it":
-            st.session_state.chat = [(asked, reply + " Already traced — shown below.")] + \
+            st.session_state.traced = None  # the committed trace wins over a stale one
+            st.session_state.chat = [(asked, reply + " Already traced — playing above.")] + \
                 st.session_state.chat[:9]
-            open_problem(slug)
-            st.session_state.view = "Problems"
             st.rerun()
         elif mode == "Trace it":
             if not live:
@@ -821,6 +831,7 @@ def ask_view(problems):
                         problem, cost, _usage = generator().generate(asked)
                         st.session_state.made += 1
                         st.session_state.traced = problem
+                        st.session_state.shown = None  # the new trace is the answer
                         st.session_state.chat = [
                             (asked, f'Traced **{problem["title"]}** — '
                                     f'{len(problem["approaches"])} approaches. Below.')
@@ -841,7 +852,9 @@ def ask_view(problems):
                 try:
                     who, text = answer(asked, st.session_state.chat)
                     if slug:
-                        text += f"\n\n*{reply} Switch to Problems to watch it run.*"
+                        # The panel renders above this answer, so say so — every
+                        # locator in a reply has to agree with where it lands.
+                        text += f"\n\n*{reply} Playing above.*"
                     st.session_state.chat = [(asked, text)] + st.session_state.chat[:9]
                 except Exception as e:  # noqa: BLE001
                     st.session_state.chat = [
@@ -849,22 +862,18 @@ def ask_view(problems):
                     ] + st.session_state.chat[:9]
         st.rerun()
 
+    # Both branches render through problem_panel, the same function the Problems
+    # page uses. A committed trace and a generated one differ by their pills and
+    # by nothing else.
+    shown = st.session_state.get("shown")
     made = st.session_state.get("traced")
-    if made:
+    if shown:
         st.divider()
-        st.markdown(
-            f'<div class="lv-title">{html.escape(made["title"])}</div>', unsafe_allow_html=True
-        )
-        st.markdown(
-            pill(made.get("difficulty") or "", made.get("difficulty") or "")
-            + pill(made.get("pattern") or "generated")
-            + pill("generated, not committed"),
-            unsafe_allow_html=True,
-        )
-        if made.get("prompt"):
-            st.markdown(f'<p class="lv-prompt">{html.escape(made["prompt"])}</p>',
-                        unsafe_allow_html=True)
-        player(made, "generated")
+        entry = next(p for p in problems if p["slug"] == shown)
+        problem_panel(load_trace(shown), f"ask:{shown}", lc=entry["lc"])
+    elif made:
+        st.divider()
+        problem_panel(made, "generated", tag="generated, not committed")
 
     for q, a in st.session_state.chat:
         st.markdown(f'<div class="lv-ask">{html.escape(q)}</div>', unsafe_allow_html=True)
@@ -948,33 +957,30 @@ def roadmap_view(index, problems):
             )
 
 
-def problem_view(problems, ready):
-    choice = next(p for p in problems if p["slug"] == st.session_state.slug)
-    trace = load_trace(choice["slug"])
+def problem_panel(trace, scope, lc=None, tag=None):
+    """Title, tags, prompt, examples, player — the one renderer for a problem.
 
-    # Prev/next walk the roadmap order, so paging through is paging through the
-    # pattern the way NeetCode's own next-problem arrow does.
-    at = ready.index(choice)
-    nav = st.columns([2, 1, 1, 10], vertical_alignment="center")
-    nav[0].button("← All problems", key="nav_back", on_click=_close)
-    if at:
-        nav[1].button("Prev", key="nav_prev", on_click=open_problem,
-                      args=(ready[at - 1]["slug"],))
-    if at + 1 < len(ready):
-        nav[2].button("Next", key="nav_next", on_click=open_problem,
-                      args=(ready[at + 1]["slug"],))
+    Every caller goes through here, so a problem looks the same whether you
+    reached it from the roadmap, by asking for it by name, or by generating it.
+    Two copies of this would drift, and a trace shown in the Ask view looking
+    unlike the 150 is exactly the bug this replaced.
+    """
+    st.markdown(f'<div class="lv-title">{html.escape(trace["title"])}</div>',
+                unsafe_allow_html=True)
+    tags = pill(trace.get("difficulty") or "", trace.get("difficulty") or "")
+    tags += pill(trace.get("pattern") or "generated")
+    if lc:
+        tags += (
+            f'<a class="lv-pill link" target="_blank" rel="noopener noreferrer" '
+            f'href="https://leetcode.com/problems/{lc}/">LeetCode '
+            f'{trace.get("leetcode", "")} ↗</a>'
+            f'<a class="lv-pill link" target="_blank" rel="noopener noreferrer" '
+            f'href="https://neetcode.io/problems/{lc}">NeetCode ↗</a>'
+        )
+    if tag:
+        tags += pill(tag)
+    st.markdown(tags, unsafe_allow_html=True)
 
-    st.markdown(f'<div class="lv-title">{html.escape(trace["title"])}</div>', unsafe_allow_html=True)
-    tags = pill(trace.get("difficulty", ""), trace.get("difficulty", "")) + pill(trace["pattern"])
-    st.markdown(
-        tags
-        + f'<a class="lv-pill link" target="_blank" rel="noopener noreferrer" '
-        f'href="https://leetcode.com/problems/{choice["lc"]}/">LeetCode '
-        f'{trace.get("leetcode", "")} ↗</a>'
-        + f'<a class="lv-pill link" target="_blank" rel="noopener noreferrer" '
-        f'href="https://neetcode.io/problems/{choice["lc"]}">NeetCode ↗</a>',
-        unsafe_allow_html=True,
-    )
     if trace.get("prompt"):
         st.markdown(f'<p class="lv-prompt">{html.escape(trace["prompt"])}</p>',
                     unsafe_allow_html=True)
@@ -992,8 +998,26 @@ def problem_view(problems, ready):
             for c in trace.get("constraints", []):
                 st.markdown(f"- {c}")
 
-    player(trace, choice["slug"])
+    player(trace, scope)
     st.caption("Press ▶ to watch it run. Every step is the real traced state, not an animation.")
+
+
+def problem_view(problems, ready):
+    choice = next(p for p in problems if p["slug"] == st.session_state.slug)
+
+    # Prev/next walk the roadmap order, so paging through is paging through the
+    # pattern the way NeetCode's own next-problem arrow does.
+    at = ready.index(choice)
+    nav = st.columns([2, 1, 1, 10], vertical_alignment="center")
+    nav[0].button("← All problems", key="nav_back", on_click=_close)
+    if at:
+        nav[1].button("Prev", key="nav_prev", on_click=open_problem,
+                      args=(ready[at - 1]["slug"],))
+    if at + 1 < len(ready):
+        nav[2].button("Next", key="nav_next", on_click=open_problem,
+                      args=(ready[at + 1]["slug"],))
+
+    problem_panel(load_trace(choice["slug"]), choice["slug"], lc=choice["lc"])
 
 
 def main():
@@ -1010,6 +1034,7 @@ def main():
     st.session_state.setdefault("view", "Problems")
     st.session_state.setdefault("open", False)
     st.session_state.setdefault("seen", set())
+    st.session_state.setdefault("shown", None)
 
     with st.sidebar:
         st.markdown('<div class="lv-brand">LeetViz</div>', unsafe_allow_html=True)
@@ -1023,7 +1048,8 @@ def main():
             watched = len(st.session_state.seen)
             st.progress(watched / len(ready), text=f"{watched} / {len(ready)} watched")
         else:
-            st.caption("Ask in words, or generate a trace for a problem outside the 150.")
+            st.caption("Name one of the 150 and it plays here. Ask anything else in "
+                       "words, or generate a trace for a problem outside them.")
 
     if st.session_state.view == "Ask":
         ask_view(problems)
