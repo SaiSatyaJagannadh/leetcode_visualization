@@ -547,37 +547,77 @@ def answer(question, history):
 TICK = 0.75  # seconds per step when playing, matching the React player's 650ms
 
 
-def _seek(key, to, last):
-    st.session_state[key] = max(0, min(to, last))
+# The playback position is deliberately NOT the slider's widget key. Ending
+# playback needs an app-scoped rerun from inside the fragment, and that discards
+# widget state for widgets the interrupted run never drew — so a position kept in
+# the slider's key silently reset to zero the moment the run finished. `pos:` is
+# an ordinary session value, and the slider is seeded from it each run.
+def _pos(skey):
+    return f"pos:{skey}"
+
+
+def _slider(skey):
+    return f"sl:{skey}"
+
+
+def _seek(skey, to, last):
+    st.session_state[_pos(skey)] = max(0, min(to, last))
     st.session_state.playing = False
 
 
-def _nudge(key, delta, last):
-    _seek(key, st.session_state.get(key, 0) + delta, last)
+def _nudge(skey, delta, last):
+    _seek(skey, st.session_state.get(_pos(skey), 0) + delta, last)
 
 
-def _toggle(key, last):
+def _scrub(skey):
+    """The user dragged the slider, so that becomes the position and play stops."""
+    st.session_state[_pos(skey)] = st.session_state[_slider(skey)]
+    st.session_state.playing = False
+
+
+def _toggle(skey, last):
     # Pressing play on the last step replays from the top, the way a video does.
-    if not st.session_state.playing and st.session_state.get(key, 0) >= last:
-        st.session_state[key] = 0
+    if not st.session_state.playing and st.session_state.get(_pos(skey), 0) >= last:
+        st.session_state[_pos(skey)] = 0
     st.session_state.playing = not st.session_state.playing
 
 
+def transport(skey, last):
+    """The buttons. Rendered by the caller, deliberately OUTSIDE the fragment.
+
+    A click on a widget inside a fragment reruns only that fragment, so the
+    `st.fragment(run_every=…)` wrapper in player() never re-executes and never
+    learns that play was pressed: the step advanced exactly once and then sat
+    there. Out here a click is an ordinary app rerun, which re-reads run_every
+    and arms or drops the timer.
+    """
+    bar = st.columns([1, 1, 1, 1, 1, 14])
+    playing = st.session_state.playing
+    for col, label, help_, cb, args in (
+        (bar[0], "⏮", "First step", _seek, (skey, 0, last)),
+        (bar[1], "◀", "Previous step", _nudge, (skey, -1, last)),
+        (bar[2], "⏸" if playing else "▶", "Pause" if playing else "Play", _toggle, (skey, last)),
+        (bar[3], "⏵", "Next step", _nudge, (skey, 1, last)),
+        (bar[4], "⏭", "Last step", _seek, (skey, last, last)),
+    ):
+        col.button(label, help=help_, on_click=cb, args=args, key=f"{skey}:{help_}")
+
+
 def stage(approach, variant, skey):
-    """Code, state, narration and transport. Re-runs on its own while playing."""
+    """Code, state, narration, scrubber. Re-runs on its own while playing."""
     steps = variant["steps"]
     last = len(steps) - 1
 
-    # Advance before any widget is drawn — Streamlit forbids writing a widget's
-    # key after that widget exists, and the slider below reads this one.
+    i = min(st.session_state.get(_pos(skey), 0), last)
     if st.session_state.playing:
-        cur = min(st.session_state.get(skey, 0), last)
-        if cur >= last:
+        if i >= last:
+            # Drop the timer. Only the caller reads run_every, so this has to
+            # leave the fragment; the position survives because it is not a
+            # widget key.
             st.session_state.playing = False
-            st.rerun(scope="app")  # drop the timer, otherwise it keeps ticking
-        st.session_state[skey] = cur + 1
-
-    i = min(st.session_state.get(skey, 0), last)
+            st.rerun(scope="app")
+        i += 1
+        st.session_state[_pos(skey)] = i
     step = steps[i]
 
     left, right = st.columns([1, 1], gap="medium")
@@ -600,18 +640,15 @@ def stage(approach, variant, skey):
         unsafe_allow_html=True,
     )
 
-    bar = st.columns([1, 1, 1, 1, 1, 14, 3])
-    playing = st.session_state.playing
-    for col, label, help_, cb, args in (
-        (bar[0], "⏮", "First step", _seek, (skey, 0, last)),
-        (bar[1], "◀", "Previous step", _nudge, (skey, -1, last)),
-        (bar[2], "⏸" if playing else "▶", "Pause" if playing else "Play", _toggle, (skey, last)),
-        (bar[3], "▶", "Next step", _nudge, (skey, 1, last)),
-        (bar[4], "⏭", "Last step", _seek, (skey, last, last)),
-    ):
-        col.button(label, help=help_, on_click=cb, args=args, key=f"{skey}:{help_}")
-    bar[5].slider("Step", 0, last, key=skey, label_visibility="collapsed")
-    bar[6].markdown(f'<div class="lv-count">{i + 1} / {last + 1}</div>', unsafe_allow_html=True)
+    bar = st.columns([16, 3])
+    # Seeded before the widget exists, which is the only moment Streamlit allows
+    # writing a widget's key. The slider is a view of the position, never its home.
+    st.session_state[_slider(skey)] = i
+    bar[0].slider(
+        "Step", 0, last, key=_slider(skey), on_change=_scrub, args=(skey,),
+        label_visibility="collapsed",
+    )
+    bar[1].markdown(f'<div class="lv-count">{i + 1} / {last + 1}</div>', unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------- page
@@ -641,6 +678,7 @@ def player(problem, scope):
     )
     variant = pick("variant", approach["variants"], f'{scope}:{approach["id"]}')
     skey = f'{scope}:{approach["id"]}:{variant["id"]}'
+    transport(skey, len(variant["steps"]) - 1)
     # run_every is read when the decorator is applied, so applying it per run is
     # what lets play and pause actually start and stop the timer.
     st.fragment(run_every=TICK if st.session_state.playing else None)(stage)(
