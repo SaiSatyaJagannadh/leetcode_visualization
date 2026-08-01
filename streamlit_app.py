@@ -126,14 +126,59 @@ a.lv-pill.link:hover {{ background:#58a6ff14; border-color:{ACCENT}; }}
 .lv-ask {{ color:{ACCENT}; font-size:13px; margin-top:14px; }}
 .lv-ask::before {{ content:"› "; color:{DIM}; }}
 
-/* the transport row: square, quiet buttons rather than Streamlit's wide default */
-div[data-testid="stHorizontalBlock"] button[kind="secondary"] {{
+/* The transport row and the roadmap rows are both plain st.buttons inside
+   horizontal blocks, so they are told apart by key: since 1.39 a widget's key
+   becomes an `st-key-<key>` class on its container. Styling by data-testid
+   alone would make every roadmap row look like a transport button. */
+div[class*="st-key-tp_"] button {{
   min-height:34px; padding:2px 0; border-color:{LINE}; background:{PANEL};
   color:{FG};
 }}
-div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {{
-  border-color:{ACCENT}; color:{ACCENT};
+div[class*="st-key-tp_"] button:hover {{ border-color:{ACCENT}; color:{ACCENT}; }}
+
+/* the roadmap: NeetCode's grouped problem table */
+.lv-sec {{ display:flex; align-items:center; gap:12px; margin:26px 0 2px; }}
+.lv-sec b {{ font-size:17px; font-weight:620; color:{FG}; letter-spacing:-0.01em; }}
+.lv-sec span {{ font:12px ui-monospace, monospace; color:{DIM}; }}
+.lv-bar {{ flex:0 0 90px; height:4px; border-radius:999px; background:{LINE};
+          overflow:hidden; }}
+.lv-bar i {{ display:block; height:100%; background:{ACCENT}; }}
+/* line-height matches the row button's height, so the number, the title and
+   the tick sit on one line rather than three slightly different ones */
+.lv-num {{ font:12px/30px ui-monospace, monospace; color:{DIM}; text-align:right; }}
+/* the pill carries bottom margin for the header stacks; in a row it must not */
+.lv-rowcell .lv-pill {{ margin:0; }}
+.lv-seen {{ color:#3fb950; font:13px/30px sans-serif; text-align:center; }}
+.lv-head {{ border-bottom:1px solid {LINE}; margin:0 0 2px; padding-bottom:6px;
+           font:11px ui-monospace, monospace; color:{DIM};
+           text-transform:uppercase; letter-spacing:0.08em; }}
+
+/* A roadmap row: a full-width button that reads as a table row, not a control.
+   The label sits in a nested flex div, so left-aligning the button is not
+   enough — the inner div is what centres it. */
+div[class*="st-key-go_"] button {{
+  border:none; background:none; padding:4px 6px; min-height:0; color:{FG};
 }}
+div[class*="st-key-go_"] button > div {{ width:100%; justify-content:flex-start; }}
+div[class*="st-key-go_"] button p {{ font-size:14px; font-weight:400; }}
+div[class*="st-key-go_"] button:hover {{ background:{PANEL}; color:{ACCENT}; }}
+div[class*="st-key-go_"] button:focus {{ color:{ACCENT}; box-shadow:none; }}
+
+/* Rows are separate horizontal blocks, so the gap between them is Streamlit's
+   1rem element spacing. :has() picks out only the rows, leaving every other
+   block on the page at its normal rhythm. */
+div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-go_"]) {{
+  border-bottom:1px solid #1a2029; margin-bottom:-10px; padding-bottom:2px;
+}}
+div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-go_"]):hover {{
+  border-color:{LINE};
+}}
+
+/* back / prev / next read as links, the way NeetCode's problem nav does */
+div[class*="st-key-nav_"] button {{
+  border:none; background:none; padding:2px 6px; min-height:0; color:{DIM};
+}}
+div[class*="st-key-nav_"] button:hover {{ color:{ACCENT}; background:none; }}
 </style>
 """
 
@@ -593,14 +638,17 @@ def transport(skey, last):
     """
     bar = st.columns([1, 1, 1, 1, 1, 14])
     playing = st.session_state.playing
-    for col, label, help_, cb, args in (
+    for n, (col, label, help_, cb, args) in enumerate((
         (bar[0], "⏮", "First step", _seek, (skey, 0, last)),
         (bar[1], "◀", "Previous step", _nudge, (skey, -1, last)),
         (bar[2], "⏸" if playing else "▶", "Pause" if playing else "Play", _toggle, (skey, last)),
         (bar[3], "⏵", "Next step", _nudge, (skey, 1, last)),
         (bar[4], "⏭", "Last step", _seek, (skey, last, last)),
-    ):
-        col.button(label, help=help_, on_click=cb, args=args, key=f"{skey}:{help_}")
+    )):
+        # The key is index-based, not label-based: a key with a space in it
+        # becomes two CSS classes, and the play button's label changes on every
+        # toggle, which would churn the widget's identity.
+        col.button(label, help=help_, on_click=cb, args=args, key=f"tp_{n}:{skey}")
 
 
 def stage(approach, variant, skey):
@@ -652,6 +700,11 @@ def stage(approach, variant, skey):
 
 
 # ---------------------------------------------------------------- page
+
+
+def _close():
+    st.session_state.open = False
+    st.session_state.playing = False
 
 
 def pill(text, kind=""):
@@ -739,9 +792,8 @@ def ask_view(problems):
         if slug and mode == "Trace it":
             st.session_state.chat = [(asked, reply + " Already traced — shown below.")] + \
                 st.session_state.chat[:9]
-            st.session_state.slug = slug
-            st.session_state.pattern = "All"
-            st.session_state.view = "Library"
+            open_problem(slug)
+            st.session_state.view = "Problems"
             st.rerun()
         elif mode == "Trace it":
             if not live:
@@ -778,7 +830,7 @@ def ask_view(problems):
                 try:
                     who, text = answer(asked, st.session_state.chat)
                     if slug:
-                        text += f"\n\n*{reply} It is in the library — switch to Library to watch it.*"
+                        text += f"\n\n*{reply} Switch to Problems to watch it run.*"
                     st.session_state.chat = [(asked, text)] + st.session_state.chat[:9]
                 except Exception as e:  # noqa: BLE001
                     st.session_state.chat = [
@@ -808,9 +860,98 @@ def ask_view(problems):
         st.markdown(a)
 
 
-def library_view(index, problems, ready):
+def open_problem(slug):
+    """Row click: show that problem and count it as watched."""
+    st.session_state.slug = slug
+    st.session_state.open = True
+    st.session_state.playing = False
+    st.session_state.seen.add(slug)
+
+
+def roadmap_view(index, problems):
+    """The problem list, NeetCode's shape: one section per pattern, each row a
+    number, a title, a difficulty and a tick once you have watched it.
+
+    Progress is real rather than decorative — it counts what this session has
+    actually opened. Nothing is persisted, so nothing is claimed that a reload
+    would contradict.
+    """
+    seen = st.session_state.seen
+    st.markdown('<div class="lv-title">The 150, traced line by line</div>',
+                unsafe_allow_html=True)
+    st.markdown(
+        '<p class="lv-prompt">Every problem below runs for real. Python traced it '
+        'ahead of time; press play and watch the variables move.</p>',
+        unsafe_allow_html=True,
+    )
+
+    bar = st.columns([3, 2], vertical_alignment="center")
+    q = bar[0].text_input(
+        "Search", placeholder="Search by name, number or pattern", label_visibility="collapsed"
+    ).strip().lower()
+    level = bar[1].segmented_control(
+        "Difficulty", ["Easy", "Medium", "Hard"], key="level", label_visibility="collapsed"
+    )
+    pool = [
+        p for p in problems
+        if (not q or q in p["title"].lower() or q in p["pattern"].lower()
+            or q in str(p["leetcode"]))
+        and (not level or p["difficulty"] == level)
+    ]
+    if not pool:
+        st.caption("Nothing matches that. The corpus is the NeetCode 150.")
+        return
+
+    done = len([p for p in pool if p["slug"] in seen])
+    st.markdown(
+        f'{pill(f"{len(pool)} problems")}{pill(f"{done} watched")}', unsafe_allow_html=True
+    )
+
+    for pattern in index["patterns"]:
+        rows = [p for p in pool if p["pattern"] == pattern]
+        if not rows:
+            continue
+        hit = len([p for p in rows if p["slug"] in seen])
+        st.markdown(
+            f'<div class="lv-sec"><b>{html.escape(pattern)}</b>'
+            f'<div class="lv-bar"><i style="width:{hit * 100 // len(rows)}%"></i></div>'
+            f"<span>{hit} / {len(rows)}</span></div>"
+            '<div class="lv-head">&nbsp;</div>',
+            unsafe_allow_html=True,
+        )
+        for p in rows:
+            cols = st.columns([1, 12, 2, 1], gap="small", vertical_alignment="center")
+            cols[0].markdown(f'<div class="lv-num">{p["leetcode"]}</div>',
+                             unsafe_allow_html=True)
+            cols[1].button(
+                p["title"], key=f'go_{p["slug"]}', on_click=open_problem, args=(p["slug"],),
+                use_container_width=True, disabled=not p["ready"],
+            )
+            cols[2].markdown(
+                f'<div class="lv-rowcell">{pill(p["difficulty"], p["difficulty"])}</div>',
+                unsafe_allow_html=True,
+            )
+            cols[3].markdown(
+                f'<div class="lv-seen">{"✓" if p["slug"] in seen else ""}</div>',
+                unsafe_allow_html=True,
+            )
+
+
+def problem_view(problems, ready):
     choice = next(p for p in problems if p["slug"] == st.session_state.slug)
     trace = load_trace(choice["slug"])
+
+    # Prev/next walk the roadmap order, so paging through is paging through the
+    # pattern the way NeetCode's own next-problem arrow does.
+    at = ready.index(choice)
+    nav = st.columns([2, 1, 1, 10], vertical_alignment="center")
+    nav[0].button("← All problems", key="nav_back", on_click=_close)
+    if at:
+        nav[1].button("Prev", key="nav_prev", on_click=open_problem,
+                      args=(ready[at - 1]["slug"],))
+    if at + 1 < len(ready):
+        nav[2].button("Next", key="nav_next", on_click=open_problem,
+                      args=(ready[at + 1]["slug"],))
 
     st.markdown(f'<div class="lv-title">{html.escape(trace["title"])}</div>', unsafe_allow_html=True)
     tags = pill(trace.get("difficulty", ""), trace.get("difficulty", "")) + pill(trace["pattern"])
@@ -855,36 +996,27 @@ def main():
     st.session_state.setdefault("playing", False)
     st.session_state.setdefault("chat", [])
     st.session_state.setdefault("made", 0)
-    st.session_state.setdefault("view", "Library")
+    st.session_state.setdefault("view", "Problems")
+    st.session_state.setdefault("open", False)
+    st.session_state.setdefault("seen", set())
 
     with st.sidebar:
         st.markdown('<div class="lv-brand">LeetViz</div>', unsafe_allow_html=True)
-        st.radio("View", ["Library", "Ask"], key="view", horizontal=True,
+        st.radio("View", ["Problems", "Ask"], key="view", horizontal=True,
                  label_visibility="collapsed")
-        if st.session_state.view == "Library":
+        if st.session_state.view == "Problems":
             st.caption(f"{len(ready)} problems traced line by line, replayed from JSON")
-            patterns = ["All"] + [
-                x for x in index["patterns"] if any(p["pattern"] == x for p in ready)
-            ]
-            st.session_state.setdefault("pattern", "All")
-            pattern = st.selectbox("Pattern", patterns, key="pattern")
-            pool = [p for p in ready if pattern == "All" or p["pattern"] == pattern]
-            if st.session_state.slug not in {p["slug"] for p in pool}:
-                st.session_state.slug = pool[0]["slug"]
-            by_slug = {p["slug"]: p for p in pool}
-            st.selectbox(
-                "Problem",
-                list(by_slug),
-                key="slug",
-                format_func=lambda s: f'{by_slug[s]["leetcode"]}. {by_slug[s]["title"]}',
-            )
+            watched = len(st.session_state.seen)
+            st.progress(watched / len(ready), text=f"{watched} / {len(ready)} watched")
         else:
             st.caption("Ask in words, or generate a trace for a problem outside the 150.")
 
     if st.session_state.view == "Ask":
         ask_view(problems)
+    elif st.session_state.open:
+        problem_view(problems, ready)
     else:
-        library_view(index, problems, ready)
+        roadmap_view(index, problems)
 
 
 if __name__ == "__main__":
