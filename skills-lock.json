@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "leetcode-teacher": {
+      "source": "jamesrochabrun/skills",
+      "sourceType": "github",
+      "skillPath": "skills/leetcode-teacher/SKILL.md",
+      "computedHash": "7e079ac1b893b9c49b5cc2616e8d88a6187cb0aa459e60b40fcef6549fd7dc6e"
+    }
+  }
+}
