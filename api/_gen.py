@@ -688,6 +688,19 @@ def validate(problem):
             bad.append(f"{where}: source is empty")
         if not a.get("variants"):
             bad.append(f"{where}: variants is empty; at least one is required")
+        # `viz` names the variable a pointer rides on. If that host is empty for
+        # every step of every variant, the picture is an empty row with an index
+        # pointing at nothing. Gemini emitted `["set", ["nums"], []]` for all
+        # three variants and then computed 6 from it: replays cleanly, shows the
+        # reader nothing. Checked across the whole approach on purpose — a
+        # genuinely empty `edge` input is legitimate, empty in all three is a
+        # dropped array.
+        hosts = {
+            spec.split(":", 1)[1]
+            for spec in (a.get("viz") or {}).values()
+            if isinstance(spec, str) and ":" in spec
+        }
+        filled = set()
         for v in a.get("variants") or []:
             vid = f"{where}/{v.get('id') or '?'}"
             steps = v.get("steps") or []
@@ -726,6 +739,7 @@ def validate(problem):
                             f"{vid} step {n}: op path {json.dumps(path)} does not exist yet; "
                             "every parent must be set before its child"
                         )
+                filled |= {h for h in hosts - filled if state.get(h)}
             end = steps[-1].get("line")
             if isinstance(end, (int, float)) and 0 <= int(end) < len(source):
                 tail = source[int(end)].strip()
@@ -766,6 +780,12 @@ def validate(problem):
                             f"{vid}: returns {expr}={json.dumps(state[expr])} but result is "
                             f"{json.dumps(v.get('result'))}; the ops and the result disagree"
                         )
+        for h in sorted(hosts - filled):
+            bad.append(
+                THIN + f"{where}: {h!r} is empty in every variant, but viz points at it. "
+                f"The first step of each variant must set {h} to that variant's real "
+                "input — the actual array or string the run works on, not an empty one."
+            )
     return bad
 
 
@@ -867,7 +887,16 @@ def _ladder(prov, key, msgs, art, byo_key, total):
             # attempt 1 was valid-but-thin, the repair returned no content, and
             # the whole request failed with a good trace already in hand.
             thin_best = thin_best or (problem, cost, bad)
-        log(f"validation failed (attempt {attempt + 1}/{MAX_REPAIRS + 1}): {'; '.join(bad[:4])}", byo_key)
+        # The repair turn is given bad[:20]; the log showed bad[:4] and said
+        # nothing about the rest, so a run that died on a structural fault
+        # hidden behind four thin ones read as "it was only thin complaints".
+        more = f" (+{len(bad) - 4} more)" if len(bad) > 4 else ""
+        log(
+            f"validation failed (attempt {attempt + 1}/{MAX_REPAIRS + 1}, "
+            f"{sum(not b.startswith(THIN) for b in bad)} structural): "
+            f"{'; '.join(bad[:4])}{more}",
+            byo_key,
+        )
         if attempt == MAX_REPAIRS:
             break
         role = "REPAIR" if prov.model("REPAIR") else "GENERATE"

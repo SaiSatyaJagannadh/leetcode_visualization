@@ -288,11 +288,33 @@ def _empty(a):
     a["variants"][0]["steps"] = []
 
 
+def _drop_input(a):
+    """Every variant sets the pointer's host to an empty list — gemini did this
+    and it replays perfectly while showing the reader an empty row."""
+    for v in a["variants"]:
+        for op in v["steps"][0]["ops"]:
+            if op[1] == ["nums"]:
+                op[2] = []
+
+
+def _off_convention(a):
+    a["variants"][1]["id"] = "all_negative"
+
+
 check("line index out of range is caught", any("outside source" in m for m in broken(_set_line)))
 check("a dangling op path is caught", any("does not exist yet" in m for m in broken(_dangle)))
 check("a result the ops never reach is caught", any("disagree" in m for m in broken(_wrong_result)))
 check("a trace that never returns is caught", any("not a return" in m for m in broken(_no_return)))
 check("an empty steps array is caught", any("steps is empty" in m for m in broken(_empty)))
+check("a viz host that is empty in every variant is caught",
+      any("is empty in every variant" in m for m in broken(_drop_input)),
+      str(broken(_drop_input)))
+check("off-convention variant ids are caught",
+      any("the three are always" in m for m in broken(_off_convention)),
+      str(broken(_off_convention)))
+# Both are thin: they replay, so shipping one beats returning nothing.
+check("both are thin, not structural",
+      all(m.startswith(_gen.THIN) for m in broken(_drop_input) + broken(_off_convention)))
 
 # 12c. A failing trace escalates to the repair model and stops at exactly 2
 # repairs. This is the whole point of the ladder: without the hard stop a

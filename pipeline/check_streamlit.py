@@ -81,6 +81,26 @@ if got is not None or "Sliding Window" not in reply:
 print(f"ask box: {len(cases) + 1} queries")
 
 
+# The 150 are built by tracer/build.py from Python that really ran. The other
+# half of the Ask view is a trace a model wrote, which obeys the same schema and
+# none of the same habits — and it had never been rendered in a check. This is a
+# real generator output kept verbatim, `nums: grid` on a flat list and all.
+made = json.loads((ROOT / "fixtures" / "generated.json").read_text())
+gen_steps = 0
+for approach in made["approaches"]:
+    for variant in approach["variants"]:
+        steps = variant["steps"]
+        for i, step in enumerate(steps):
+            try:
+                render_state(state_at(steps, i), approach["viz"], approach["layout"], touched(step))
+                source_html(approach["source"], step["line"])
+            except Exception as e:  # noqa: BLE001
+                fails.append(f'generated/{approach["id"]}/{variant["id"]} step {i}: '
+                             f"{type(e).__name__}: {e}")
+            gen_steps += 1
+print(f"generated trace: {gen_steps} steps replayed")
+
+
 # The 150 are built by tracer/build.py and their viz specs are always honest.
 # A generated trace writes its own, and gemini has declared `grid` on a flat
 # list — which used to send an int through the row loop and take the whole page
@@ -147,7 +167,19 @@ ok("...with the problem's own title and prompt",
    any("Two Sum" in m.value for m in app.markdown),
    "no title")
 
-print("app: 11 interactions")
+
+# And the same trace through the app. Seeded rather than generated: the render
+# path is what is under test, not the model or the network.
+app.session_state.shown = None
+app.session_state.traced = made
+app.run()
+ok("a generated trace renders in the Ask view", not app.exception, str(app.exception))
+ok("...through the same player as the 150",
+   any(b.key.startswith("tp_") and "generated" in b.key for b in app.button))
+ok("...and says it is not one of them",
+   any("generated, not committed" in m.value for m in app.markdown))
+
+print("app: 14 interactions")
 for f in fails:
     print("  FAIL", f)
 if fails:
