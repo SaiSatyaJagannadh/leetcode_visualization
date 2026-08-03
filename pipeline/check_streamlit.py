@@ -78,7 +78,16 @@ got, reply = resolve("sliding window", index["problems"])
 if got is not None or "Sliding Window" not in reply:
     fails.append(f"resolve('sliding window') should list the pattern, gave {got!r}")
 
-print(f"ask box: {len(cases) + 1} queries")
+# Explain grounds the teacher on resolve()'s reply, but only when that reply is a
+# fact about the corpus — the gate is "a slug, or a bolded name". A miss must
+# therefore bold nothing, or the teacher is handed "No match. Try a LeetCode
+# number" as authoritative and explains the search box instead of an algorithm.
+for query in ("xyzzy", "", "   "):
+    got, reply = resolve(query, index["problems"])
+    if got or reply.startswith("**"):
+        fails.append(f"resolve({query!r}) reads as a corpus fact: {reply!r}")
+
+print(f"ask box: {len(cases) + 4} queries")
 
 
 # The 150 are built by tracer/build.py from Python that really ran. The other
@@ -116,6 +125,23 @@ for spec, state in (
         render_state(state, spec, {}, set())
     except Exception as e:  # noqa: BLE001 — any crash is the failure
         fails.append(f"viz {spec} on {state} crashed the reader: {type(e).__name__}: {e}")
+
+
+# The leetcode-teacher skill ships its patterns as prose, so the mapping from
+# our eighteen pattern names to its ten is hand-written and can rot silently:
+# rename a heading in the skill and the template just stops appearing.
+from streamlit_app import PATTERN_MAP, teacher_sections, teaching  # noqa: E402
+
+sections = teacher_sections()
+if not sections:
+    fails.append("the leetcode-teacher reference parsed to nothing")
+for ours, theirs in PATTERN_MAP.items():
+    if theirs not in sections:
+        fails.append(f"PATTERN_MAP sends {ours!r} to {theirs!r}, which the skill does not define")
+    if not any(p["pattern"] == ours for p in index["problems"]):
+        fails.append(f"PATTERN_MAP names {ours!r}, which is not a pattern in the corpus")
+mapped = [p for p in index["patterns"] if teaching(p)]
+print(f"teacher: {len(sections)} patterns, {len(mapped)}/{len(index['patterns'])} mapped")
 
 
 # Everything above tests pure functions, which is exactly the class of bug it

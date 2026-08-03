@@ -506,6 +506,60 @@ def resolve(query, problems):
     return None, "No match. Try a LeetCode number, a title, or a pattern name."
 
 
+# ---------------------------------------------------------------- teacher
+
+# The leetcode-teacher skill (.agents/skills/leetcode-teacher) carries ten
+# patterns, each with a Python template and a real product it shows up in. This
+# corpus is grouped into eighteen NeetCode patterns, so the two vocabularies are
+# mapped by hand rather than matched on text — "Linked List" and "Fast & Slow
+# Pointers" are the same idea under two names, and nothing textual says so.
+# Patterns with no counterpart are simply absent; a wrong template teaches worse
+# than none.
+TEACHER = ROOT / ".agents" / "skills" / "leetcode-teacher" / "references" / "patterns.md"
+PATTERN_MAP = {
+    "Two Pointers": "Two Pointers",
+    "Sliding Window": "Sliding Window",
+    "Linked List": "Fast & Slow Pointers",
+    "Intervals": "Merge Intervals",
+    "Binary Search": "Binary Search (Modified)",
+    "Heap / Priority Queue": "Top K Elements",
+    "Graphs": "BFS (Breadth-First Search)",
+    "Advanced Graphs": "BFS (Breadth-First Search)",
+    "Trees": "DFS (Depth-First Search)",
+    "1-D Dynamic Programming": "Dynamic Programming",
+    "2-D Dynamic Programming": "Dynamic Programming",
+    "Backtracking": "Backtracking",
+}
+
+
+@st.cache_data
+def teacher_sections():
+    """`## Pattern N: Name` -> the section body, from the skill's reference."""
+    try:
+        text = TEACHER.read_text()
+    except OSError:  # noqa: BLE001 — the skill is optional, the site is not
+        return {}
+    out, name, buf = {}, None, []
+    for line in text.splitlines():
+        head = re.match(r"^## Pattern \d+: (.+)$", line)
+        if head or line.startswith("## "):
+            if name:
+                out[name] = "\n".join(buf).strip()
+            name, buf = (head.group(1).strip() if head else None), []
+        elif name:
+            buf.append(line)
+    if name:
+        out[name] = "\n".join(buf).strip()
+    return out
+
+
+def teaching(pattern):
+    """(teacher's name, section markdown) for one of our patterns, or None."""
+    named = PATTERN_MAP.get(pattern)
+    body = teacher_sections().get(named) if named else None
+    return (named, body) if body else None
+
+
 # ---------------------------------------------------------------- llm
 
 # Their keys, their public URL: a stranger must not be able to spend the whole
@@ -513,12 +567,22 @@ def resolve(query, problems):
 # money, so they are what is counted.
 MAX_GEN_PER_SESSION = int(os.environ.get("LEETVIZ_MAX_GENERATIONS", "3"))
 
+# Teaching, not lecturing. The order here is the order a good interviewer walks
+# you through a problem, and it is why Explain reads differently from a search
+# result: pattern first, then the signal that names it, then brute force, then
+# why the clever version is cheaper.
 _CHAT_SYSTEM = (
-    "You explain algorithms and data structures for LeetViz, a site that shows "
-    "traced solutions step by step. Answer in at most 150 words, plainly, and "
-    "say the reasoning rather than narrating syntax. Give complexity when it is "
-    "relevant. Never reproduce a LeetCode or NeetCode problem statement "
-    "verbatim — restate it in your own words. If you do not know, say so."
+    "You are the teacher on LeetViz, a site that plays traced solutions step by "
+    "step. Teach pattern-first: name the pattern, say the signal in the problem "
+    "that points to it, then the idea in plain words — never a syntax walkthrough. "
+    "Say the brute force and what makes it wasteful before the clever version, and "
+    "give time and space for both. Where it earns its line, anchor the pattern to "
+    "a real product use — top-K to a trending list, intervals to a calendar, trie "
+    "to autocomplete — one clause, no story. If the reader sounds stuck rather "
+    "than done, give the next hint instead of the finished solution; give the "
+    "whole thing when they ask for it. Answer in at most 180 words, plainly. "
+    "Never reproduce a LeetCode or NeetCode problem statement verbatim — restate "
+    "it in your own words. If you do not know, say so."
 )
 
 
@@ -553,7 +617,7 @@ def providers():
         return []
 
 
-def answer(question, history):
+def answer(question, history, ground=""):
     """A plain chat answer.
 
     Reuses _gen's transport, chain order and retry rules rather than reimplementing
@@ -561,12 +625,24 @@ def answer(question, history):
     exhausted for days, because it picked a provider instead of walking the chain.
     Failover fires on the same conditions generation uses, and a provider whose
     account is empty gets marked dead for the process the same way.
+
+    `ground` is what resolve() already worked out from the corpus — the title,
+    difficulty and pattern of the problem being asked about. It is passed in
+    because the model's recollection of which pattern a problem belongs to is a
+    guess and the index is a fact, and the two disagreeing in one reply is worse
+    than either alone.
     """
     gen = generator()
     provs = gen.chain("CHEAP") or gen.chain("GENERATE")
     if not provs:
         return None, "No model configured. Add the keys below to Streamlit secrets."
-    msgs = [{"role": "system", "content": _CHAT_SYSTEM}]
+    system = _CHAT_SYSTEM
+    if ground:
+        system += (
+            "\n\nThis site's own index says: " + ground + " Those facts win over "
+            "your recollection when the two disagree."
+        )
+    msgs = [{"role": "system", "content": system}]
     for q, a in history[-4:][::-1]:
         msgs += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
     msgs.append({"role": "user", "content": question})
@@ -795,7 +871,8 @@ def ask_view(problems):
     )
     st.caption(
         "Name any of the 150 — “leetcode 25”, “two sum”, “sliding window” — and it "
-        "plays right here. **Explain** also answers in words; **Trace it** generates "
+        "plays right here. **Explain** teaches it — pattern first, brute force, then "
+        "why the fast version is faster; **Trace it** generates "
         "a new visualization, in the same shape as the 150, for anything outside them."
     )
 
@@ -850,7 +927,28 @@ def ask_view(problems):
         else:
             with st.spinner("Thinking"):
                 try:
-                    who, text = answer(asked, st.session_state.chat)
+                    # resolve() bolds a title or a pattern exactly when it found
+                    # one; its other replies ("No match. Try a…") are instructions
+                    # to the reader, not facts about the corpus, and grounding on
+                    # those would have the teacher explain the search box.
+                    facts = reply if slug or reply.startswith("**") else ""
+                    if slug:
+                        # Only a slug puts a player on screen. Saying so for a
+                        # pattern listing would be a locator pointing at nothing.
+                        facts += " That trace is playing above your reply, so teach it."
+                        # The reader can expand this same template under the
+                        # trace. An answer that taught a different shape than
+                        # the one on screen would be teaching against itself.
+                        lesson = teaching(
+                            next(p for p in problems if p["slug"] == slug)["pattern"]
+                        )
+                        if lesson:
+                            facts += (
+                                f"\n\nThe house template for this pattern ({lesson[0]}), "
+                                f"which the reader can open under the trace — stay "
+                                f"consistent with it:\n{lesson[1]}"
+                            )
+                    who, text = answer(asked, st.session_state.chat, facts)
                     if slug:
                         # The panel renders above this answer, so say so — every
                         # locator in a reply has to agree with where it lands.
@@ -1000,6 +1098,15 @@ def problem_panel(trace, scope, lc=None, tag=None):
 
     player(trace, scope)
     st.caption("Press ▶ to watch it run. Every step is the real traced state, not an animation.")
+
+    # The trace shows this one problem solved. The pattern is what carries over
+    # to the next one, so the skill's template sits right under it — collapsed,
+    # because it is the second thing you want, not the first.
+    lesson = teaching(trace.get("pattern") or "")
+    if lesson:
+        named, body = lesson
+        with st.expander(f"The pattern: {named}"):
+            st.markdown(body)
 
 
 def problem_view(problems, ready):

@@ -41,7 +41,9 @@ what serves `/solve` and `/admin/spend`.
 ## The Ask view (optional — needs a model key)
 
 Without secrets the Streamlit app still works: the 150 traces and the lookup box
-need no network at all. Adding a key turns on the **Ask** view, which has two
+need no network at all — naming any of the 150 plays it, and the pattern template
+below it comes from the `leetcode-teacher` skill in `.agents/skills/`, read off
+disk rather than generated. Adding a key turns on the **Ask** view, which has two
 modes:
 
 - **Explain** — a plain answer in words, from the cheap model.
