@@ -1,9 +1,66 @@
 # leetcode_visualization
 
-LeetViz — 150 LeetCode problems traced line by line in Python ahead of time, so
-the reader only replays JSON. See `CLAUDE.md` for the architecture.
+LeetViz — watch 150 LeetCode problems actually run, one line at a time.
 
-Live Streamlit app: **https://leetviz-traces.streamlit.app**
+Live Streamlit app: **https://leetviz-traces.streamlit.app** — no signup, no key.
+
+## What it's for
+
+Reading a solution is not the same as seeing it run. The usual way to study these
+problems is to read the final code and take someone's word for what the variables
+are doing; the loop that "moves a pointer inward" is a sentence, and the sentence
+is where it stops making sense.
+
+So every problem here is *executed* ahead of time and every line's effect is
+recorded. Press play and the current line lights up while the real state moves
+beside it — the array, the two pointers closing in, the hash map filling, the tree
+being walked, the recursion stack growing and unwinding. Nothing is hand-drawn and
+nothing is an approximation: each frame is the actual value the variables held at
+that line.
+
+It is for the stretch where you already know *what* the answer is and still cannot
+see *why* it works — and for spotting the pattern under it, which is the part that
+transfers to the problem you get asked in the interview.
+
+## Using it
+
+The corpus is the NeetCode 150 shape: **150 problems** across **18 patterns**
+(28 Easy, 101 Medium, 21 Hard), all traced and playable.
+
+**Find a problem.** The roadmap lists every problem grouped by pattern, with a
+progress bar per group. Search by name, number or pattern — "two sum", "leetcode
+25", "sliding window" all work — or filter to Easy / Medium / Hard. Problems you
+have watched get ticked, so a long sitting has a visible edge.
+
+**Watch it run.** Open one and you get the problem in original wording, a link out
+to LeetCode and NeetCode for the official statement, then the player:
+
+- **Approach tabs** — 148 of the 150 carry two, a brute force next to the
+  idiomatic one, with time and space on each. The point is to watch the slow one
+  be slow, so the fast one is an answer to something rather than a trick.
+- **Variant tabs** — three runs of the same code: `typical`, `edge` and
+  `worst-case`. Same algorithm, different input, and the edge case is usually
+  where the understanding actually happens.
+- **The player** — step forward and back, jump to either end, or press play and
+  let it run. The source panel lights the current line; the panel beside it draws
+  the live state, shaped to what the value is (cells with indices, grids, trees,
+  linked lists, graphs, heaps, tries, interval bars, the recursion call tree).
+- **The narration** — one line under the player saying what the step just did, so
+  you are never guessing which change mattered.
+
+**Learn the pattern.** Under the trace is the house template for its pattern — the
+signal in a problem that points to it, and the shape of the solution it implies.
+That comes from the `leetcode-teacher` skill in `.agents/skills/`, read off disk,
+so it is the same lesson every time rather than a fresh guess. 12 of the 18
+patterns have one so far, covering 108 of the 150 problems; the rest show the
+trace alone.
+
+**Ask about it.** The **Ask** view takes a question in words. Naming any of the
+150 plays that trace right there and needs no model at all. With a key configured
+it also answers free-form questions, and can generate a brand-new trace for a
+problem outside the 150 — see [The Ask view](#the-ask-view-optional--needs-a-model-key).
+
+See `CLAUDE.md` for how the tracing works.
 
 ## Two front ends, one set of traces
 
@@ -28,8 +85,10 @@ python3 pipeline/check_streamlit.py   # replays all 150 traces through the reade
 
 ## Deploy the Streamlit app
 
-Streamlit Community Cloud builds straight from this repo — no secrets needed,
-because nothing in the Streamlit path calls a model.
+Streamlit Community Cloud builds straight from this repo. No secrets are needed
+for the part people come for: all 150 traces, the search and the pattern
+templates are read off disk and never touch the network. Secrets only turn on the
+Ask view's two model-backed modes, below.
 
 Already deployed at https://leetviz-traces.streamlit.app — it redeploys itself
 on every push to `main`. To stand up another copy: https://share.streamlit.io →
