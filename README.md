@@ -89,11 +89,11 @@ time a trace reaches a reader, even the x/y of every tree node is already in it.
 
 ```mermaid
 flowchart LR
-    S["📄 solution.py<br/>META · VARIANTS · APPROACHES"]
-    T["🐍 tracer/leetviz.py<br/>sys.settrace line hooks"]
-    J["📦 traces/slug.json<br/>ops + baked coordinates"]
-    N["⚛️ Next.js<br/>SVG player · /solve"]
-    L["🎈 Streamlit<br/>single-file reader"]
+    S["📄 solution.py"]
+    T["🐍 sys.settrace recorder"]
+    J["📦 traces/*.json"]
+    N["⚛️ Next.js SVG player"]
+    L["🎈 Streamlit reader"]
 
     S -->|"run it for real"| T
     T -->|"diff the locals"| J
