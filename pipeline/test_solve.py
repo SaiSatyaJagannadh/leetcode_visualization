@@ -301,6 +301,14 @@ def _off_convention(a):
     a["variants"][1]["id"] = "all_negative"
 
 
+def _huge_index(a):
+    """A well-formed integer that is not a sane one. validate() pads a list out to
+    the index an op names, so the size of that allocation is the model's to pick
+    unless something bounds it — and this runs inside the serverless function."""
+    a["variants"][0]["steps"][0]["ops"] = [["set", ["nums"], []],
+                                           ["set", ["nums", 10**9], 1]]
+
+
 check("line index out of range is caught", any("outside source" in m for m in broken(_set_line)))
 check("a dangling op path is caught", any("does not exist yet" in m for m in broken(_dangle)))
 check("a result the ops never reach is caught", any("disagree" in m for m in broken(_wrong_result)))
@@ -309,6 +317,8 @@ check("an empty steps array is caught", any("steps is empty" in m for m in broke
 check("a viz host that is empty in every variant is caught",
       any("is empty in every variant" in m for m in broken(_drop_input)),
       str(broken(_drop_input)))
+check("an out-of-range array index is rejected, not allocated",
+      any("out of range" in m for m in broken(_huge_index)), str(broken(_huge_index))[:200])
 check("off-convention variant ids are caught",
       any("the three are always" in m for m in broken(_off_convention)),
       str(broken(_off_convention)))
@@ -512,6 +522,48 @@ for _k in ("NVIDIA_API_KEY", "NVIDIA_MODEL_GENERATE", "OPENAI_API_KEY", "OPENAI_
     os.environ.pop(_k, None)
 
 reset()
+
+# 14. The identity the quota counts against, and the body it reads to find one.
+#     Both are caller-controlled, so both are trust boundaries rather than
+#     plumbing. The session cookie is cleared by opening a new tab, which leaves
+#     the IP as the only per-caller limit there is.
+
+
+class _Req(_lib.JSONHandler):
+    """A handler with headers and a body and no socket. BaseHTTPRequestHandler's
+    __init__ would try to serve a connection, so it is not the one that runs."""
+
+    def __init__(self, headers, body=b""):
+        self.headers = headers
+        self.rfile = io.BytesIO(body)
+        self.client_address = ("203.0.113.9", 0)
+
+
+# A proxy appends to x-forwarded-for, so its first entry is whatever the caller
+# typed. Trusting it made the per-IP quota a header away from unlimited.
+check("a spoofed x-forwarded-for does not become the quota identity",
+      _Req({"x-forwarded-for": "1.2.3.4, 70.0.0.1"}).client_ip() == "70.0.0.1",
+      _Req({"x-forwarded-for": "1.2.3.4, 70.0.0.1"}).client_ip())
+check("vercel's own header wins over a forged list",
+      _Req({"x-forwarded-for": "1.2.3.4", "x-vercel-forwarded-for": "70.0.0.2"}).client_ip()
+      == "70.0.0.2")
+check("x-real-ip is trusted when vercel's is absent",
+      _Req({"x-real-ip": "70.0.0.3", "x-forwarded-for": "1.2.3.4"}).client_ip() == "70.0.0.3")
+check("with no proxy headers the socket peer is the identity",
+      _Req({}).client_ip() == "203.0.113.9")
+check("two forged headers still land on one quota bucket",
+      _Req({"x-forwarded-for": "1.1.1.1, 70.0.0.1"}).client_ip()
+      == _Req({"x-forwarded-for": "2.2.2.2, 70.0.0.1"}).client_ip())
+
+# The prompt-length gate runs long after the body is in memory, so it does not
+# bound what a caller can make us allocate. Content-Length is their number.
+check("a body within the cap parses",
+      _Req({"Content-Length": "14"}, b'{"prompt":"x"}').payload() == {"prompt": "x"})
+big = _lib.MAX_BODY_BYTES + 1
+check("an oversized body is refused without being read",
+      _Req({"Content-Length": str(big)}, b"x" * big).payload() == {})
+check("a lying Content-Length cannot read past the cap",
+      _Req({"Content-Length": "999999999"}, b"x" * 100).payload() == {})
 
 print(f"\n{len(FAILS)} failures")
 sys.exit(1 if FAILS else 0)

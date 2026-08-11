@@ -51,6 +51,9 @@ STUB_COST_USD = float(os.environ.get("SOLVE_STUB_COST_USD", "0.02"))
 # arbitrarily large prompt on every request. A real problem statement with
 # examples and constraints is well under this.
 MAX_PROMPT_CHARS = int(os.environ.get("SOLVE_MAX_PROMPT_CHARS", "8000"))
+# The request body is read into memory before any gate can look at the prompt, so
+# the prompt limit alone does not bound what a caller can make us allocate.
+MAX_BODY_BYTES = MAX_PROMPT_CHARS * 4 + 4096
 DAY_TTL = 86_400
 CACHE_TTL = 30 * DAY_TTL
 
@@ -536,7 +539,14 @@ class JSONHandler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def payload(self):
-        n = int(self.headers.get("Content-Length") or 0)
+        # Content-Length is caller-controlled, so reading it whole is a memory
+        # DoS: the prompt length gate in solve() only runs after the body is
+        # already in RAM. The cap is the prompt limit plus room for the JSON
+        # envelope and a turnstile token; anything past that cannot be a valid
+        # request anyway, so it is refused rather than truncated.
+        n = min(int(self.headers.get("Content-Length") or 0), MAX_BODY_BYTES + 1)
+        if n > MAX_BODY_BYTES:
+            return {}
         try:
             return json.loads(self.rfile.read(n) or b"{}")
         except ValueError:
@@ -547,8 +557,22 @@ class JSONHandler(BaseHTTPRequestHandler):
         return urllib.parse.parse_qs(q).get(name, [""])[0]
 
     def client_ip(self):
-        fwd = self.headers.get("x-forwarded-for", "")
-        return fwd.split(",")[0].strip() or self.client_address[0]
+        """The IP the per-day quota is counted against, so it is a trust boundary.
+
+        `x-forwarded-for` is a list the caller can prepend to — a proxy appends,
+        it does not overwrite — so its *first* entry is whatever the client typed.
+        Reading that entry made the IP quota free to bypass with one header, which
+        left only the session cookie, and a cookie is cleared by opening a new tab.
+
+        Vercel's edge sets `x-vercel-forwarded-for` / `x-real-ip` itself and they
+        cannot be spoofed through it. The last hop of `x-forwarded-for` is the
+        fallback, because the entry nearest our proxy is the one our proxy wrote.
+        """
+        for name in ("x-vercel-forwarded-for", "x-real-ip"):
+            if (v := (self.headers.get(name) or "").strip()):
+                return v
+        fwd = [p.strip() for p in self.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+        return (fwd[-1] if fwd else "") or self.client_address[0]
 
     def session(self):
         """Returns (sid, set_cookie_or_None)."""

@@ -47,6 +47,10 @@ SPLIT = "---8<--- context"
 # output limit; raise it per deployment if a model is chattier still.
 MAX_OUTPUT_TOKENS = int(os.environ.get("SOLVE_MAX_OUTPUT_TOKENS", "32000"))
 MAX_REPAIRS = 2  # hard stop, per the model ladder
+# The largest array index validate() will pad a list out to. The corpus never
+# comes near it; it exists so a wrong number in a generated trace is rejected
+# rather than allocated.
+MAX_INDEX = 10_000
 # A congested NIM free tier answers in 125-180s, so the old hard-coded 180s read
 # timeout cut off legitimate replies. Budget math worth knowing: this must stay
 # under vercel.json maxDuration, and maxDuration must cover attempts x timeout,
@@ -727,6 +731,18 @@ def validate(problem):
                             node.pop(str(last) if isinstance(node, dict) else int(last), None)
                         elif isinstance(node, list):
                             i = int(last)
+                            # Padding to a model-supplied index is an allocation
+                            # a model chooses the size of. Strict mode makes the
+                            # JSON well-formed, not sane, and `1e9` here is a
+                            # well-formed integer that fills a 300s function's
+                            # memory before anything gets to reject the trace.
+                            # Nothing the player can draw indexes this far out.
+                            if not 0 <= i <= MAX_INDEX:
+                                bad.append(
+                                    f"{vid} step {n}: op path index {i} is out of range "
+                                    f"(0..{MAX_INDEX})"
+                                )
+                                continue
                             while len(node) <= i:
                                 node.append(None)
                             node[i] = op[2]

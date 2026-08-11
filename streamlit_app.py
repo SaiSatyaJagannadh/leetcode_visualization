@@ -174,6 +174,12 @@ div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-go_"]):hover {{
   border-color:{LINE};
 }}
 
+/* Streamlit's own chrome on a link people are handed: the Deploy button and the
+   hamburger are for whoever runs the app, not for a reader, and the default top
+   padding pushes the title a third of the way down the first screen. */
+div[data-testid="stToolbar"], div[data-testid="stDecoration"], footer {{ display:none; }}
+div[data-testid="stMainBlockContainer"] {{ padding-top:3rem; }}
+
 /* back / prev / next read as links, the way NeetCode's problem nav does */
 div[class*="st-key-nav_"] button {{
   border:none; background:none; padding:2px 6px; min-height:0; color:{DIM};
@@ -562,10 +568,20 @@ def teaching(pattern):
 
 # ---------------------------------------------------------------- llm
 
-# Their keys, their public URL: a stranger must not be able to spend the whole
-# balance by holding down enter. Traces are the only thing here that costs real
-# money, so they are what is counted.
+# My keys, a public URL: a stranger must not be able to spend the whole balance by
+# holding down enter. A trace costs the most, but Explain is a model call too —
+# counting only traces left the cheap path unbounded, which is the one you can
+# hold down enter on.
+#
+# Two counters per path, because they bound different things. The session ones are
+# the visible ones and they reset on reload; that is a courtesy limit, not a wall.
+# The day ones live in KV (see budget()) and are the wall.
 MAX_GEN_PER_SESSION = int(os.environ.get("LEETVIZ_MAX_GENERATIONS", "3"))
+MAX_ASK_PER_SESSION = int(os.environ.get("LEETVIZ_MAX_ASKS", "15"))
+DAY_CAP = {
+    "gen": int(os.environ.get("LEETVIZ_DAY_GENERATIONS", "40")),
+    "ask": int(os.environ.get("LEETVIZ_DAY_ASKS", "300")),
+}
 
 # Teaching, not lecturing. The order here is the order a good interviewer walks
 # you through a problem, and it is why Explain reads differently from a search
@@ -615,6 +631,27 @@ def providers():
     except Exception as e:  # noqa: BLE001 — a bad import must not blank the page
         st.session_state.llm_error = f"{type(e).__name__}: {e}"
         return []
+
+
+def budget(kind):
+    """Claim one model call of `kind` against today's budget. False when it is out.
+
+    The session counters beside this one are honest about what they are: session
+    state dies on reload and the app says so, which bounds a polite reader and
+    nothing else. This counter is keyed by day in the same store the deployed
+    API's quota uses — `_lib` already owns the KV client and the day key, so this
+    is a second caller, not a second store — and it survives the reload.
+
+    ponytail: check-then-increment, so two simultaneous readers can both take the
+    last slot. Atomic INCR-then-compare with a refund is the upgrade path; at
+    these caps the worst case is a couple of extra calls, not a bill.
+    """
+    lib = generator()._lib
+    key = f"st:{kind}:{lib.day_key()}"
+    if lib.num(lib.store.get(key)) >= DAY_CAP[kind]:
+        return False
+    lib.store.incr(key, 1, lib.DAY_TTL)
+    return True
 
 
 def answer(question, history, ground=""):
@@ -856,14 +893,23 @@ def ask_view(problems):
     if live:
         st.markdown(
             pill(" · ".join(live))
-            + pill(f"{MAX_GEN_PER_SESSION - st.session_state.made} traces left this session"),
+            + pill(f"{MAX_GEN_PER_SESSION - st.session_state.made} traces left this session")
+            + pill(f"{MAX_ASK_PER_SESSION - st.session_state.asks} questions left"),
             unsafe_allow_html=True,
         )
     else:
-        st.warning("No model is configured yet, so only the 150 traced problems answer.")
-        st.markdown(SETUP)
-        if st.session_state.get("llm_error"):
-            st.caption(f'Import failed: {st.session_state.llm_error}')
+        # What a visitor needs to know is one sentence: naming any of the 150
+        # still works. The secrets block underneath is for whoever runs the app,
+        # and it was being shown to everyone who opened the page — a config dump
+        # is not an answer to "what is this". It stays, one click down.
+        st.caption(
+            "Free-form answers are off right now — no model is configured. Naming any "
+            "of the 150 still plays it, and that path needs no key at all."
+        )
+        with st.expander("Running this yourself? Turn Ask on"):
+            st.markdown(SETUP)
+            if st.session_state.get("llm_error"):
+                st.caption(f"Import failed: {st.session_state.llm_error}")
 
     mode = st.segmented_control(
         "mode", ["Explain", "Trace it"], default="Explain", key="askmode",
@@ -902,6 +948,12 @@ def ask_view(problems):
                     (asked, f"Session limit of {MAX_GEN_PER_SESSION} generations reached. "
                             "Reload to start a new session.")
                 ] + st.session_state.chat[:9]
+            elif not budget("gen"):
+                st.session_state.chat = [
+                    (asked, f"This site has generated its {DAY_CAP['gen']} traces for today — "
+                            "the budget resets tomorrow. All 150 committed traces still play, "
+                            "and **Explain** still answers.")
+                ] + st.session_state.chat[:9]
             else:
                 with st.spinner("Tracing — this runs the real generator, ~30-60s"):
                     try:
@@ -924,6 +976,16 @@ def ask_view(problems):
                                     "A trace that will not replay is refused rather than "
                                     "shown. A stronger `*_MODEL_GENERATE` is the usual fix.")
                         ] + st.session_state.chat[:9]
+        elif live and st.session_state.asks >= MAX_ASK_PER_SESSION:
+            st.session_state.chat = [
+                (asked, f"Session limit of {MAX_ASK_PER_SESSION} questions reached. "
+                        "Reload to start a new session — the 150 traces need no model.")
+            ] + st.session_state.chat[:9]
+        elif live and not budget("ask"):
+            st.session_state.chat = [
+                (asked, "This site has answered its questions for today — the budget resets "
+                        "tomorrow. Every one of the 150 traces still plays.")
+            ] + st.session_state.chat[:9]
         else:
             with st.spinner("Thinking"):
                 try:
@@ -949,6 +1011,7 @@ def ask_view(problems):
                                 f"consistent with it:\n{lesson[1]}"
                             )
                     who, text = answer(asked, st.session_state.chat, facts)
+                    st.session_state.asks += 1
                     if slug:
                         # The panel renders above this answer, so say so — every
                         # locator in a reply has to agree with where it lands.
@@ -1138,6 +1201,7 @@ def main():
     st.session_state.setdefault("playing", False)
     st.session_state.setdefault("chat", [])
     st.session_state.setdefault("made", 0)
+    st.session_state.setdefault("asks", 0)
     st.session_state.setdefault("view", "Problems")
     st.session_state.setdefault("open", False)
     st.session_state.setdefault("seen", set())

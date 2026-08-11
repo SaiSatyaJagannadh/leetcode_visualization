@@ -10,11 +10,18 @@ corpus contains.
 """
 
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+# budget() counts against the same store the API's quota uses, and with no KV
+# credentials that store is a file. Point it somewhere disposable before anything
+# can import _lib, so a test run cannot spend the developer's real day budget.
+os.environ["KV_LOCAL_PATH"] = str(Path(tempfile.mkdtemp()) / "kv.json")
 
 from streamlit_app import (  # noqa: E402
     render_state,
@@ -206,6 +213,21 @@ ok("...and says it is not one of them",
    any("generated, not committed" in m.value for m in app.markdown))
 
 print("app: 14 interactions")
+
+
+# The app is a public URL holding my API keys, so the caps are the load-bearing
+# part. The per-session ones are visible and reset on reload — that is on
+# purpose, and it is why they are not what is checked here. This is the one that
+# has to survive a reload, because a reload is the whole bypass.
+import streamlit_app as sa  # noqa: E402
+
+sa.DAY_CAP["ask"] = 2
+ok("the day budget hands out exactly its cap",
+   [sa.budget("ask") for _ in range(3)] == [True, True, False])
+ok("reloading does not refill it", sa.budget("ask") is False)
+ok("each path draws on its own budget", sa.budget("gen") is True)
+print("caps: day budget holds")
+
 for f in fails:
     print("  FAIL", f)
 if fails:

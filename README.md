@@ -70,9 +70,14 @@ SOLVE_PROVIDER_ORDER = "google,openai,nvidia"
 
 Two things to know before you turn it on:
 
-- **It spends your money.** `LEETVIZ_MAX_GENERATIONS` (default 3) caps traces per
-  browser session, because the URL is public. Explain answers are cheap; traces
-  are not.
+- **It spends your money**, and the URL is public, so it is capped twice. The
+  per-session caps are the ones the page shows — `LEETVIZ_MAX_GENERATIONS`
+  (default 3) and `LEETVIZ_MAX_ASKS` (default 15). Session state dies on reload,
+  so those bound a polite reader and nothing else; the wall is the per-day
+  budget, `LEETVIZ_DAY_GENERATIONS` (default 40) and `LEETVIZ_DAY_ASKS`
+  (default 300), counted in the same store the deployed API's quota uses.
+  Explain is the cheap path, but a cheap call in a loop is still a bill — both
+  paths are counted, not just traces.
 - **A weak `*_MODEL_GENERATE` will fail.** The trace is validated by replaying it
   the way the player does, and one that does not replay is refused after two
   repair attempts rather than shown. On `gemini-2.5-flash` that happens on
