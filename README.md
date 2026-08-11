@@ -77,7 +77,10 @@ Two things to know before you turn it on:
   budget, `LEETVIZ_DAY_GENERATIONS` (default 40) and `LEETVIZ_DAY_ASKS`
   (default 300), counted in the same store the deployed API's quota uses.
   Explain is the cheap path, but a cheap call in a loop is still a bill — both
-  paths are counted, not just traces.
+  paths are counted, not just traces. With no KV credentials in the app's secrets
+  that day counter is a file in the container's `/tmp`, so a restart resets it;
+  add `KV_REST_API_URL` and `KV_REST_API_TOKEN` to make it survive one and share
+  a budget with the deployed API.
 - **A weak `*_MODEL_GENERATE` will fail.** The trace is validated by replaying it
   the way the player does, and one that does not replay is refused after two
   repair attempts rather than shown. On `gemini-2.5-flash` that happens on

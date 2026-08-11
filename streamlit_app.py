@@ -645,6 +645,12 @@ def budget(kind):
     ponytail: check-then-increment, so two simultaneous readers can both take the
     last slot. Atomic INCR-then-compare with a refund is the upgrade path; at
     these caps the worst case is a couple of extra calls, not a bill.
+
+    ponytail: with no KV credentials the store is a file in the container's /tmp,
+    so on Streamlit Cloud a container restart resets the day. That is a ceiling,
+    not a hole — it bounds a visitor holding down enter, which is the thing it is
+    for. Put KV_REST_API_URL/KV_REST_API_TOKEN in the app's secrets to make it
+    survive restarts and share one budget with the deployed API.
     """
     lib = generator()._lib
     key = f"st:{kind}:{lib.day_key()}"
