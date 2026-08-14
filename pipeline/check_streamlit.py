@@ -284,6 +284,47 @@ ok("a junk token loads the app rather than breaking it",
 
 print("progress: url token round-trips, seeds the app, and fails safe")
 
+
+# The sidebar is the only route to the Ask view, and it shipped unreachable:
+# `stExpandSidebarButton` is a child of `stToolbar`, so a rule hiding the toolbar
+# hides the control that opens a collapsed sidebar. On Streamlit Cloud the
+# sidebar loads collapsed, so the deployed app had no navigation at all while
+# localhost — where it loads expanded — looked perfect. Neither half is visible
+# to a test that only calls functions, so both are asserted on the source.
+import re as _re  # noqa: E402
+
+from streamlit_app import CSS  # noqa: E402
+
+app_src = (ROOT / "streamlit_app.py").read_text()
+# Comments first — this check exists because of a rule whose comment now names
+# the very selectors it must not find, and matching prose would fail forever.
+_css = _re.sub(r"/\*.*?\*/", "", CSS, flags=_re.S)
+hidden = {
+    sel.strip()
+    for rule in _re.findall(r"([^{}]*)\{[^{}]*display\s*:\s*none[^{}]*\}", _css)
+    for sel in rule.split(",")
+}
+ok("no CSS rule hides the toolbar, which owns the sidebar's expand button",
+   not any("stToolbar" in s for s in hidden),
+   str([s for s in hidden if "stToolbar" in s]))
+ok("no CSS rule hides the sidebar or its expand button",
+   not any("Sidebar" in s for s in hidden), str([s for s in hidden if "Sidebar" in s]))
+ok("the sidebar is opened explicitly rather than left on auto",
+   'initial_sidebar_state="expanded"' in app_src)
+
+# The number lookup is the thing people actually type. Every spelling of it has
+# to reach the same trace, and a number outside the corpus has to say so rather
+# than guess a neighbour.
+lookups = {"1": "two-sum", "25": "reverse-nodes-in-k-group", "leetcode 25": "reverse-nodes-in-k-group",
+           "lc 25": "reverse-nodes-in-k-group", "#25": "reverse-nodes-in-k-group",
+           "217": "contains-duplicate", "226": "invert-binary-tree"}
+for query, want in lookups.items():
+    got, _ = resolve(query, index["problems"])
+    ok(f"{query!r} resolves to {want}", got == want, f"got {got}")
+ok("a number outside the corpus resolves to nothing, not a neighbour",
+   resolve("9999", index["problems"])[0] is None)
+print(f"ask: {len(lookups)} number spellings resolve; sidebar reachable")
+
 for f in fails:
     print("  FAIL", f)
 if fails:

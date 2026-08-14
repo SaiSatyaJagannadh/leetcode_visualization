@@ -257,10 +257,14 @@ div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-go_"]):hover {{
   border-color:{LINE};
 }}
 
-/* Streamlit's own chrome on a link people are handed: the Deploy button and the
-   hamburger are for whoever runs the app, not for a reader, and the default top
-   padding pushes the title a third of the way down the first screen. */
-div[data-testid="stToolbar"], div[data-testid="stDecoration"], footer {{ display:none; }}
+/* Streamlit's own chrome on a link people are handed. Hide the Deploy button by
+   name, NOT the whole toolbar: stExpandSidebarButton is a child of stToolbar, and
+   on Streamlit Cloud the sidebar loads collapsed. Hiding the toolbar there left a
+   collapsed sidebar with no way to open it — which is the whole navigation, so
+   the Ask view became unreachable on the deployed app while looking fine locally,
+   where the sidebar happens to load expanded. There is no Deploy button on Cloud
+   at all, so the broad rule bought nothing and cost everything. */
+[data-testid="stAppDeployButton"], [data-testid="stDecoration"], footer {{ display:none; }}
 div[data-testid="stMainBlockContainer"] {{ padding-top:3rem; }}
 
 /* back / prev / next read as links, the way NeetCode's problem nav does */
@@ -761,7 +765,12 @@ def answer(question, history, ground=""):
     gen = generator()
     provs = gen.chain("CHEAP") or gen.chain("GENERATE")
     if not provs:
-        return None, "No model configured. Add the keys below to Streamlit secrets."
+        # The setup block moved into an expander above this reply, so "below" was
+        # pointing at the chat box. Every locator in a reply has to agree with
+        # where it actually lands.
+        return None, ("No model configured, so I cannot answer in words — but naming "
+                      "any of the 150 still plays it. See **Running this yourself?** "
+                      "above to turn this on.")
     system = _CHAT_SYSTEM
     if ground:
         system += (
@@ -1280,7 +1289,10 @@ def problem_view(problems, ready):
 
 
 def main():
-    st.set_page_config(page_title="LeetViz", page_icon="◆", layout="wide")
+    # expanded, not "auto": the sidebar is the only way to reach Ask, and on
+    # Streamlit Cloud auto resolved to collapsed.
+    st.set_page_config(page_title="LeetViz", page_icon="◆", layout="wide",
+                       initial_sidebar_state="expanded")
     st.markdown(CSS, unsafe_allow_html=True)
 
     index = load_index()
