@@ -228,6 +228,62 @@ ok("reloading does not refill it", sa.budget("ask") is False)
 ok("each path draws on its own budget", sa.budget("gen") is True)
 print("caps: day budget holds")
 
+
+# Watched progress rides in the URL, so the token is caller-supplied input on one
+# side and someone's study record on the other. A wrong tick is worse than a
+# missing one, so every failure here has to fail to empty.
+from streamlit_app import all_slugs, decode_seen, encode_seen  # noqa: E402
+
+SLUGS = all_slugs()
+ok("every problem is in the slug list", len(SLUGS) == len(index["problems"]))
+
+for case in [set(), {"two-sum"}, {SLUGS[0], SLUGS[-1]}, set(SLUGS[::3]), set(SLUGS)]:
+    ok(f"a set of {len(case)} round-trips", decode_seen(encode_seen(case, SLUGS), SLUGS) == case)
+
+full = encode_seen(set(SLUGS), SLUGS)
+ok("the token stays short enough for a URL", len(full) < 64, f"{len(full)} chars")
+
+# The bitmask is positional, so a token minted against a different corpus would
+# tick the wrong rows — confidently, and invisibly. The fingerprint is what makes
+# that case detectable rather than plausible.
+shifted = ["aardvark-problem"] + SLUGS[:-1]
+ok("a token from a different corpus is discarded",
+   decode_seen(encode_seen({SLUGS[0]}, SLUGS), shifted) == set())
+
+for junk in ["", "!!!!", "zzzz", "zzzznotbase64!!", SLUGS[0], full[:3]]:
+    got = decode_seen(junk, SLUGS)
+    ok(f"junk token {junk[:12]!r} decodes to empty", got == set(), str(got)[:60])
+
+# A token clipped by a chat app or an editor keeps its fingerprint, so it is a
+# real record with its tail missing rather than junk. Reading the surviving bytes
+# loses the later problems and never invents an earlier one — the direction this
+# is allowed to be wrong in.
+clipped = encode_seen(set(SLUGS), SLUGS)[:12]
+ok("a clipped token never reports more than was watched",
+   decode_seen(clipped, SLUGS) < set(SLUGS), str(len(decode_seen(clipped, SLUGS))))
+ok("a clipped token still recovers what survived",
+   decode_seen(clipped, SLUGS) == set(SLUGS[:48]), str(len(decode_seen(clipped, SLUGS))))
+# The encode/decode pair being correct says nothing about the app actually
+# seeding itself from the URL, which is the half a reader would notice. Boot a
+# second app with a token in the query string and check the ticks come back.
+carried = encode_seen({"two-sum", SLUGS[-1]}, SLUGS)
+app2 = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=120)
+app2.query_params["p"] = carried
+app2.run()
+ok("a fresh load with a token restores the watched set",
+   not app2.exception and app2.session_state.seen == {"two-sum", SLUGS[-1]},
+   str(getattr(app2, "exception", "")) or str(app2.session_state.seen)[:80])
+ok("a restored session is told its progress rides in the link",
+   any("Bookmark this page" in c.value for c in app2.caption), "no bookmark hint rendered")
+
+app3 = AppTest.from_file(str(ROOT / "streamlit_app.py"), default_timeout=120)
+app3.query_params["p"] = "not-a-real-token"
+app3.run()
+ok("a junk token loads the app rather than breaking it",
+   not app3.exception and app3.session_state.seen == set(), str(app3.exception))
+
+print("progress: url token round-trips, seeds the app, and fails safe")
+
 for f in fails:
     print("  FAIL", f)
 if fails:

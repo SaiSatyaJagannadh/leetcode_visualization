@@ -52,6 +52,13 @@ progress bar per group. Search by name, number or pattern — "two sum", "leetco
 25", "sliding window" all work — or filter to Easy / Medium / Hard. Problems you
 have watched get ticked, so a long sitting has a visible edge.
 
+Those ticks ride in the page URL as a short token, so a refresh, a bookmark or a
+restored tab keeps them, and pasting the link on your phone carries your progress
+across. Streamlit cannot set a cookie — `st.context.cookies` is read-only — so the
+alternative was a third-party JS component or keying progress off the IP, and an
+IP puts everyone behind one office router on the same progress bar. The honest
+ceiling: a cold visit to the bare domain starts empty.
+
 **Watch it run.** Open one and you get the problem in original wording, a link out
 to LeetCode and NeetCode for the official statement, then the player:
 

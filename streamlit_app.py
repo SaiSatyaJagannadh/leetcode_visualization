@@ -6,7 +6,9 @@ no server, no API. Ops are folded forward exactly the way `lib/fold.ts` does it,
 so a step shown here is the step the React player shows.
 """
 
+import base64
 import difflib
+import hashlib
 import html
 import json
 import os
@@ -30,6 +32,87 @@ def load_index():
 @st.cache_data
 def load_trace(slug):
     return json.loads((TRACES / f"{slug}.json").read_text())
+
+
+# ---------------------------------------------------------------- progress
+#
+# Which problems you have watched is the one piece of state worth outliving the
+# tab, and it was dying on every refresh — a study tool that reads 0 / 150 every
+# visit is not measuring anything.
+#
+# It lives in the URL rather than on the server because Streamlit cannot set a
+# cookie: `st.context.cookies` is read-only, so there is no per-visitor id to key
+# storage on, and the alternatives are a third-party JS component or hashing the
+# IP. Hashing the IP would put everyone behind one office router on the same
+# progress bar, which is worse than forgetting.
+#
+# What that buys, and what it costs: a refresh, a bookmark and a restored tab all
+# keep their ticks, and the URL is portable — paste it on your phone and your
+# progress goes with it. A cold visit to the bare domain starts empty. That is
+# the real ceiling of this approach, not an oversight.
+
+
+@st.cache_data
+def all_slugs():
+    """Sorted, so a bit position depends on the corpus and not on display order."""
+    return sorted(p["slug"] for p in load_index()["problems"])
+
+
+def _fingerprint(slugs):
+    """Four characters naming this exact corpus.
+
+    A bitmask is only meaningful against the list it was minted for. Add a
+    problem and every bit after it shifts by one, so an old token would tick the
+    wrong rows — confidently, and with no way for the reader to tell. The
+    fingerprint makes that case detectable, and a mismatch costs someone their
+    ticks rather than showing them somebody else's.
+    """
+    return hashlib.sha256("\x00".join(slugs).encode()).hexdigest()[:4]
+
+
+def encode_seen(seen, slugs):
+    """The watched set as a fingerprinted bitmask, short enough to live in a URL.
+
+    150 problems is 150 bits — 19 bytes, 26 characters once base64'd. Listing the
+    slugs instead would be a 2 KB query string.
+    """
+    bits = bytearray((len(slugs) + 7) // 8)
+    for i, slug in enumerate(slugs):
+        if slug in seen:
+            bits[i // 8] |= 1 << (i % 8)
+    packed = base64.urlsafe_b64encode(bytes(bits)).decode().rstrip("=")
+    return _fingerprint(slugs) + packed
+
+
+def decode_seen(token, slugs):
+    """Inverse of encode_seen. Anything malformed reads as "watched nothing".
+
+    The token is a query parameter, so it is whatever the caller typed. A progress
+    bar is not worth an exception on page load, and a missing tick is a smaller
+    lie than a wrong one — every failure here fails to empty.
+    """
+    if not token or token[:4] != _fingerprint(slugs):
+        return set()
+    body = token[4:]
+    try:
+        bits = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+    except ValueError:  # binascii.Error subclasses it; bad padding, bad alphabet
+        return set()
+    return {
+        slug for i, slug in enumerate(slugs)
+        if i // 8 < len(bits) and bits[i // 8] >> (i % 8) & 1
+    }
+
+
+def watch(slug):
+    """Mark a problem watched.
+
+    The only place `seen` grows, which is what makes it the only place the URL
+    has to be kept in step. Both callers used to do the `add` themselves, and a
+    third one would have quietly not persisted.
+    """
+    st.session_state.seen.add(slug)
+    st.query_params["p"] = encode_seen(st.session_state.seen, all_slugs())
 
 
 def state_at(steps, index):
@@ -939,7 +1022,7 @@ def ask_view(problems):
         # another page is the whole point of the Ask view.
         st.session_state.shown = slug
         if slug:
-            st.session_state.seen.add(slug)
+            watch(slug)
         if slug and mode == "Trace it":
             st.session_state.traced = None  # the committed trace wins over a stale one
             st.session_state.chat = [(asked, reply + " Already traced — playing above.")] + \
@@ -1052,7 +1135,7 @@ def open_problem(slug):
     st.session_state.slug = slug
     st.session_state.open = True
     st.session_state.playing = False
-    st.session_state.seen.add(slug)
+    watch(slug)
 
 
 def roadmap_view(index, problems):
@@ -1210,7 +1293,10 @@ def main():
     st.session_state.setdefault("asks", 0)
     st.session_state.setdefault("view", "Problems")
     st.session_state.setdefault("open", False)
-    st.session_state.setdefault("seen", set())
+    # Seeded from the URL, so a refresh keeps its ticks. setdefault, not assign:
+    # after the first run of a session the session state is the live copy and the
+    # query parameter is only its echo.
+    st.session_state.setdefault("seen", decode_seen(st.query_params.get("p", ""), all_slugs()))
     st.session_state.setdefault("shown", None)
 
     with st.sidebar:
@@ -1224,6 +1310,11 @@ def main():
             st.caption(f"{len(ready)} problems traced line by line, replayed from JSON")
             watched = len(st.session_state.seen)
             st.progress(watched / len(ready), text=f"{watched} / {len(ready)} watched")
+            # Progress rides in the URL, which is no use to anyone who does not
+            # know it is there. Only worth saying once there is something to keep.
+            if watched:
+                st.caption("Bookmark this page to keep your progress — it travels "
+                           "with the link, so it opens the same on your phone.")
         else:
             st.caption("Name one of the 150 and it plays here. Ask anything else in "
                        "words, or generate a trace for a problem outside them.")
