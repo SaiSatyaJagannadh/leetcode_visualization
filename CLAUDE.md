@@ -221,16 +221,27 @@ in practice, and a drift shows up as a cache miss, never as a wrong trace.
 the same chat-completions protocol, so only the base URL, key and model names
 differ. Both are `Provider` instances; there are no model literals anywhere.
 
-Failover fires on 429, 5xx, and a reply cut off at the output cap. A 400 is our
-own malformed request and must surface, so note that `HTTPError` subclasses
-`URLError` and has to be tested first or a 400 gets misreported as an outage. A
+Failover fires on 429, 5xx, 401/403, and a reply cut off at the output cap. A
+400 is our own malformed request and must surface, so note that `HTTPError`
+subclasses `URLError` and has to be tested first or a 400 gets misreported as an
+outage. 401/403 look like a 400 and are the opposite: they are about this
+provider's credential — wrong key, expired key, or a key with no entitlement to
+the configured model — which is precisely what the next provider can serve. They
+also go into `_DEAD`, for the same reason an exhausted balance does: a refused
+credential is refused on the next request too, so remembering it costs one
+wasted round-trip per process instead of one per request. A
 trace that will not replay is never failed over: a weaker model is not the fix
 and it doubles the bill. Truncation is the one exception and it is not really
 one — the model stopped mid-trace, so there is no trace to judge, and how much
 of the cap a model spends on hidden reasoning before writing a token of JSON
 differs per provider. That is why `GenerationError` carries a `retry` flag which
 is False everywhere except there. A bring-your-own key pins OpenAI, so a BYO
-request can never spend our NVIDIA credit. All five rules have tests.
+request can never spend our NVIDIA credit. All six rules have tests.
+
+What the reader is told about a failure has to match which of these happened.
+`streamlit_app.failure_advice` reads the status code, because a single line of
+advice for every failure ("a stronger `*_MODEL_GENERATE` is the usual fix") sent
+someone whose NIM key was refused off to change the one setting that was working.
 
 The one real asymmetry: `strict: true` is an OpenAI feature. On NIM the JSON
 schema is a request rather than a contract, so malformed JSON is possible again.

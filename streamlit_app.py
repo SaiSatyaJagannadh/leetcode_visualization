@@ -685,7 +685,15 @@ _CHAT_SYSTEM = (
     "than done, give the next hint instead of the finished solution; give the "
     "whole thing when they ask for it. Answer in at most 180 words, plainly. "
     "Never reproduce a LeetCode or NeetCode problem statement verbatim — restate "
-    "it in your own words. If you do not know, say so."
+    "it in your own words. If you do not know, say so. "
+    # Asked about "leetcode 2135" with nothing to go on, the model explained a
+    # different problem entirely, in the confident register it uses for the ones
+    # it does know. Which title a number maps to is a lookup, and the only
+    # trustworthy copy of it is the index below.
+    "You cannot reliably recall which problem a LeetCode number refers to. Never "
+    "state what a number is unless the site's index has told you in this same "
+    "message; if it has not, say you cannot confirm which problem that number is "
+    "and ask for the title instead. Guessing it wrong is worse than not knowing."
 )
 
 
@@ -718,6 +726,36 @@ def providers():
     except Exception as e:  # noqa: BLE001 — a bad import must not blank the page
         st.session_state.llm_error = f"{type(e).__name__}: {e}"
         return []
+
+
+def failure_advice(e):
+    """The one sentence worth reading under a failed generation.
+
+    "A stronger `*_MODEL_GENERATE` is the usual fix" is true of a trace that
+    would not replay and false of everything else, but it was printed for every
+    failure — so a rejected API key sent the reader off to change the one
+    setting that was never the problem. The status code already knows which
+    kind of failure this was; this just says so.
+    """
+    code = getattr(e, "code", None)
+    if code in (401, 403):
+        return (
+            f"**{code} is a credential problem, not a model one.** The provider "
+            "rejected the key rather than the request, so a different "
+            "`*_MODEL_GENERATE` will not help. Check the key is still live, that "
+            "it is pasted whole, and that your account is entitled to the model "
+            "it names — on NVIDIA NIM a 403 usually means the key is fine but "
+            "has no access to that particular model. Every configured provider "
+            "was tried before you saw this."
+        )
+    if code == 429:
+        return ("**Rate-limited upstream**, on every provider configured. Nothing "
+                "to fix — a minute is usually enough.")
+    if isinstance(code, int) and 500 <= code < 600:
+        return (f"**{code} is the provider's outage**, not this app's bug and not "
+                "your key. Worth trying again later.")
+    return ("A trace that will not replay is refused rather than shown. "
+            "A stronger `*_MODEL_GENERATE` is the usual fix.")
 
 
 def budget(kind):
@@ -1070,9 +1108,8 @@ def ask_view(problems):
                         # redactor anyway — upstream prose can quote a key.
                         why = generator()._lib.redact(str(e))[:400]
                         st.session_state.chat = [
-                            (asked, f"**Generation failed.** {type(e).__name__}: {why}\\n\\n"
-                                    "A trace that will not replay is refused rather than "
-                                    "shown. A stronger `*_MODEL_GENERATE` is the usual fix.")
+                            (asked, f"**Generation failed.** {type(e).__name__}: {why}\n\n"
+                                    + failure_advice(e))
                         ] + st.session_state.chat[:9]
         elif live and st.session_state.asks >= MAX_ASK_PER_SESSION:
             st.session_state.chat = [
@@ -1091,7 +1128,15 @@ def ask_view(problems):
                     # one; its other replies ("No match. Try a…") are instructions
                     # to the reader, not facts about the corpus, and grounding on
                     # those would have the teacher explain the search box.
-                    facts = reply if slug or reply.startswith("**") else ""
+                    # Everything resolve() worked out is a fact about the corpus
+                    # and belongs in the prompt; only its two "try a number, a
+                    # title or a pattern" nudges are instructions to the reader.
+                    # Dropping the rest threw away the most useful fact there is
+                    # — "LeetCode 2135 is not one of the 150" — and left the
+                    # model to recall the numbering itself, which it cannot do:
+                    # asked for 2135 it confidently explained a different
+                    # problem. The index knows; the model guesses.
+                    facts = "" if reply.startswith(("Ask for a problem", "No match.")) else reply
                     if slug:
                         # Only a slug puts a player on screen. Saying so for a
                         # pattern listing would be a locator pointing at nothing.

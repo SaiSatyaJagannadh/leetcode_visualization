@@ -325,6 +325,44 @@ ok("a number outside the corpus resolves to nothing, not a neighbour",
    resolve("9999", index["problems"])[0] is None)
 print(f"ask: {len(lookups)} number spellings resolve; sidebar reachable")
 
+
+# A failed generation used to print one sentence of advice whatever went wrong,
+# so a rejected key told the reader to go and pick a stronger model.
+import urllib.error as _ue  # noqa: E402
+
+from streamlit_app import _CHAT_SYSTEM, failure_advice  # noqa: E402
+
+_http = lambda c: _ue.HTTPError("u", c, "boom", {}, None)
+ok("a 403 is named as a credential problem",
+   "credential problem" in failure_advice(_http(403)), failure_advice(_http(403))[:60])
+ok("a 403 does not send the reader off to change the model",
+   "stronger" not in failure_advice(_http(403)))
+ok("a 401 reads the same way", "credential problem" in failure_advice(_http(401)))
+ok("a 429 is named as a rate limit", "Rate-limited" in failure_advice(_http(429)))
+ok("a 502 is named as the provider's outage",
+   "outage" in failure_advice(_http(502)), failure_advice(_http(502))[:60])
+ok("a trace that will not replay still gets the model advice",
+   "stronger" in failure_advice(ValueError("ops and result disagree")))
+
+# The message is markdown, and an escaped backslash in an ordinary string is a
+# literal backslash-n that renders as text rather than a break — which is how it
+# shipped, visible in the app as "Forbidden\n\nA trace that will not replay".
+# The source legitimately contains a real "\n" escape, so what makes this
+# detectable is the doubled backslash, not the n.
+ok("the failure message uses a real newline, not an escaped backslash",
+   "\\\\n" not in app_src, repr([l for l in app_src.splitlines() if "\\\\n" in l][:2]))
+
+# Which title a LeetCode number maps to is a lookup, and the model is not a copy
+# of it: asked about 2135 with no grounding it explained a different problem.
+ok("the chat prompt forbids recalling a number from memory",
+   "cannot reliably recall which problem a LeetCode number" in _CHAT_SYSTEM)
+unknown_reply = resolve("leetcode 2135", index["problems"])[1]
+ok("a number outside the corpus still produces a fact to ground on",
+   unknown_reply.startswith("I do not have LeetCode 2135"), unknown_reply[:60])
+ok("that fact is not one of the reader-only nudges the prompt drops",
+   not unknown_reply.startswith(("Ask for a problem", "No match.")))
+print("ask: failure advice matches the failure; numbers are grounded, not recalled")
+
 for f in fails:
     print("  FAIL", f)
 if fails:

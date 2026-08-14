@@ -174,6 +174,16 @@ def _mark_if_dead(prov, e):
         if prov.id not in _DEAD:
             log(f"{prov.id} reports {code}; skipping it until this process restarts")
         _DEAD[prov.id] = code
+    # A rejected credential is rejected on the next request too, so it belongs
+    # here for the same reason an exhausted balance does: one wasted round-trip
+    # per process instead of one per request. 401 is a key that is wrong, 403 a
+    # key that is real but not allowed to use this model — neither improves by
+    # being asked again.
+    elif isinstance(e, urllib.error.HTTPError) and e.code in (401, 403):
+        if prov.id not in _DEAD:
+            log(f"{prov.id} rejected the credential ({e.code}); skipping it "
+                "until this process restarts")
+        _DEAD[prov.id] = f"http_{e.code}"
 
 
 def _retryable(e):
@@ -189,7 +199,13 @@ def _retryable(e):
     if isinstance(e, GenerationError):
         return e.retry
     if isinstance(e, urllib.error.HTTPError):
-        return e.code in (429, 500, 502, 503, 504)
+        # 401/403 are about this provider's credential, not about the request:
+        # a key that is wrong, expired, or not entitled to the configured model.
+        # That is exactly the case another provider can serve, and refusing to
+        # fail over meant one bad key took generation down while a working
+        # provider sat next in the chain. It is not a 400 — a 400 says our
+        # request is malformed, which every provider would reject identically.
+        return e.code in (401, 403, 429, 500, 502, 503, 504)
     return isinstance(e, (urllib.error.URLError, TimeoutError))
 
 

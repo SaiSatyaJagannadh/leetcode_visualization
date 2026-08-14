@@ -465,6 +465,28 @@ except urllib.error.HTTPError:
     raised = True
 check("400 surfaces instead of failing over (it is our bug)", raised and seen == ["openai"], str(seen))
 
+# A rejected credential is about the provider, not the request: the key is
+# wrong, expired, or not entitled to the configured model. Refusing to fail over
+# let one bad key take generation down while a working provider sat next in the
+# chain — which is what a NIM key with no access to its model actually does.
+for _code in (401, 403):
+    _gen._DEAD.clear()
+    fail_on_error = [_HTTP(_code)]
+    seen = []
+    with patched(_gen, "call", _fake("openai", seen)):
+        prob, _, _ = _gen.generate("reverse a linked list")
+    check(f"{_code} on openai fails over to nvidia", seen == ["openai", "nvidia"], str(seen))
+    check(f"the trace after a {_code} failover is still valid", prob["schemaVersion"] == 1)
+    # And it is remembered, so the next request does not re-ask a key that was
+    # already refused — the same reasoning that retires an exhausted balance.
+    check(f"a {_code} retires that provider for the process", "openai" in _gen._DEAD,
+          str(_gen._DEAD))
+    seen = []
+    with patched(_gen, "call", _fake("openai", seen)):
+        _gen.generate("reverse a linked list")
+    check(f"the next request skips the {_code} provider entirely", seen == ["nvidia"], str(seen))
+_gen._DEAD.clear()
+
 fail_on_error = [_gen.GenerationError("will not replay")]
 seen = []
 try:
