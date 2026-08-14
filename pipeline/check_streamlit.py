@@ -375,6 +375,23 @@ ok("the floor is checked before the budget is claimed",
    app_src.index("MIN_TRACE_CHARS:") < app_src.index('elif not budget("gen")'))
 print(f"ask: trace floor is {MIN_TRACE_CHARS} chars, checked before spending")
 
+# Retiring a provider empties the chain, which is the same shape as never having
+# configured one — so a refused key reported itself as a missing setting and sent
+# the reader to the setup block to fix something that was already right.
+from streamlit_app import retired  # noqa: E402
+
+_gen_mod = sys.modules.get("_gen")
+ok("nothing is retired on a clean run", retired() == {}, str(retired()))
+if _gen_mod is not None:
+    _gen_mod._DEAD["nvidia"] = "http_403"
+    try:
+        ok("a refused key is reported as retired, not as unconfigured",
+           retired() == {"nvidia": "http_403"}, str(retired()))
+    finally:
+        _gen_mod._DEAD.clear()
+    ok("clearing it restores the unconfigured case", retired() == {})
+print("ask: a refused key reads as a credential problem, not a missing setting")
+
 for f in fails:
     print("  FAIL", f)
 if fails:

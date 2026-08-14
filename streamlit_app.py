@@ -732,6 +732,20 @@ def providers():
         return []
 
 
+def retired():
+    """Providers this process has given up on, and why.
+
+    Empty unless a key was refused or a balance ran out. It is what tells "no
+    model is configured" apart from "the model is configured and its key was
+    rejected" — the chain is empty either way, and only one of them is fixed by
+    reading the setup block.
+    """
+    try:
+        return dict(generator()._DEAD)
+    except Exception:  # noqa: BLE001 — a bad import must not blank the page
+        return {}
+
+
 def failure_advice(e):
     """The one sentence worth reading under a failed generation.
 
@@ -1042,10 +1056,25 @@ def ask_view(problems):
         # still works. The secrets block underneath is for whoever runs the app,
         # and it was being shown to everyone who opened the page — a config dump
         # is not an answer to "what is this". It stays, one click down.
-        st.caption(
-            "Free-form answers are off right now — no model is configured. Naming any "
-            "of the 150 still plays it, and that path needs no key at all."
-        )
+        #
+        # "No model is configured" is only one of the two ways to end up here, and
+        # after a refused key it is the wrong one: retiring the provider empties
+        # the chain, so a configured-but-rejected key started reporting itself as
+        # a missing one and sent the reader to the setup block to fix a setting
+        # that was already correct.
+        gone = retired()
+        if gone:
+            st.caption(
+                "Free-form answers are off — every configured provider refused this "
+                f"app's key ({', '.join(f'{k}: {v}' for k, v in gone.items())}). That is "
+                "a credential problem, not a missing setting. Naming any of the 150 "
+                "still plays it, and that path needs no key at all."
+            )
+        else:
+            st.caption(
+                "Free-form answers are off right now — no model is configured. Naming any "
+                "of the 150 still plays it, and that path needs no key at all."
+            )
         with st.expander("Running this yourself? Turn Ask on"):
             st.markdown(SETUP)
             if st.session_state.get("llm_error"):
