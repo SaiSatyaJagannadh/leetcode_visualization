@@ -665,6 +665,10 @@ def teaching(pattern):
 # The day ones live in KV (see budget()) and are the wall.
 MAX_GEN_PER_SESSION = int(os.environ.get("LEETVIZ_MAX_GENERATIONS", "3"))
 MAX_ASK_PER_SESSION = int(os.environ.get("LEETVIZ_MAX_ASKS", "15"))
+# Shortest thing worth paying to trace. The real floor is "is this a problem at
+# all", which nothing cheap can answer; 8 rejects a stray keystroke while leaving
+# room for the shortest genuine names ("wiggle sort" is 11).
+MIN_TRACE_CHARS = 8
 DAY_CAP = {
     "gen": int(os.environ.get("LEETVIZ_DAY_GENERATIONS", "40")),
     "ask": int(os.environ.get("LEETVIZ_DAY_ASKS", "300")),
@@ -1083,6 +1087,18 @@ def ask_view(problems):
                 st.session_state.chat = [
                     (asked, f"Session limit of {MAX_GEN_PER_SESSION} generations reached. "
                             "Reload to start a new session.")
+                ] + st.session_state.chat[:9]
+            # A generation is 30-60s and real money, and "t" is not a problem.
+            # The gates below count what was spent; this one is about not
+            # spending it on a typo in the first place. Deliberately generous —
+            # "wiggle sort" is a real problem name and has to get through.
+            elif len(asked.strip()) < MIN_TRACE_CHARS:
+                st.session_state.chat = [
+                    (asked, f"That is too short to trace — give me a problem name or "
+                            f"its statement, at least {MIN_TRACE_CHARS} characters. "
+                            "**Explain** answers short questions; **Trace it** has to "
+                            "build a whole visualization, so it needs something to build "
+                            "from.")
                 ] + st.session_state.chat[:9]
             elif not budget("gen"):
                 st.session_state.chat = [

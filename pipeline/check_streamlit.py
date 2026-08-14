@@ -363,6 +363,18 @@ ok("that fact is not one of the reader-only nudges the prompt drops",
    not unknown_reply.startswith(("Ask for a problem", "No match.")))
 print("ask: failure advice matches the failure; numbers are grounded, not recalled")
 
+
+# "trace t" would have spent a 30-60s generation on one character. The budget
+# gates count what was spent; this is about not spending it on a keystroke.
+from streamlit_app import MIN_TRACE_CHARS  # noqa: E402
+
+ok("a stray keystroke is below the trace floor", len("t") < MIN_TRACE_CHARS)
+ok("the shortest real problem names clear it",
+   all(len(n) >= MIN_TRACE_CHARS for n in ["wiggle sort", "jump game", "word break"]))
+ok("the floor is checked before the budget is claimed",
+   app_src.index("MIN_TRACE_CHARS:") < app_src.index('elif not budget("gen")'))
+print(f"ask: trace floor is {MIN_TRACE_CHARS} chars, checked before spending")
+
 for f in fails:
     print("  FAIL", f)
 if fails:
